@@ -1,0 +1,4 @@
+# Files to be ignored by Git #
+
+*.py[co]
+__pycache__/
