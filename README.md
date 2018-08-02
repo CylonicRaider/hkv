@@ -1,2 +1,3 @@
 # hkv
-In-memory hierarchical key-value store
+
+In-memory hierarchical key-value store.
