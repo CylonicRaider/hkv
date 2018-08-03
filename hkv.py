@@ -5,24 +5,30 @@
 In-memory hierarchical key-value store.
 """
 
-DELIMITER = b'/'
-
 class HKVError(Exception): pass
 
 class DataStore:
     def __init__(self):
         self.data = {}
 
-    def _follow_path(self, path):
+    def _follow_path(self, path, create=False):
         cur = self.data
         for ent in path:
-            cur = cur[ent]
+            try:
+                cur = cur[ent]
+            except KeyError:
+                if create:
+                    new = {}
+                    cur[ent] = new
+                    cur = new
+                else:
+                    raise
         return cur
 
-    def _split_follow_path(self, path):
+    def _split_follow_path(self, path, create=False):
         if not path: raise HKVError('Path too short')
         prefix, last = path[:-1], path[-1]
-        return self._follow_path(prefix), last
+        return self._follow_path(prefix, create), last
 
     def get(self, path):
         ret = self._follow_path(path)
@@ -35,7 +41,7 @@ class DataStore:
         return ret
 
     def put(self, path, value):
-        record, key = self._split_follow_path(path)
+        record, key = self._split_follow_path(path, True)
         record[key] = value
 
     def put_all(self, path, values):
