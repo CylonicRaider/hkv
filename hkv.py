@@ -10,10 +10,15 @@ import struct
 ERRORS = {
     'NOKEY': (1, 'No such key'),
     'BADTYPE': (2, 'Invalid value type'),
-    'BADPATH': (3, 'Path too short')
+    'BADPATH': (3, 'Path too short'),
+    'BADLCLASS': (4, 'Bad listing class')
     }
 
 ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
+
+LCLASS_BYTES = 1
+LCLASS_SUBKEYS = 2
+LCLASS_ANY = 3
 
 INTEGER = struct.Struct('!I')
 
@@ -59,9 +64,20 @@ class DataStore:
         return ret
 
     def get_all(self, path):
-        ret = self._follow_path(path)
+        record = self._follow_path(path)
         if not isinstance(ret, dict): raise HKVError.for_error('BADTYPE')
-        return ret
+        return {k: v for k, v in record.items() if not isinstance(v, dict)}
+
+    def list(self, path, lclass):
+        record = self._follow_path(path)
+        if lclass == LCLASS_BYTES:
+            return [k for k, v in record.items() if not isinstance(v, dict)]
+        elif lclass == LCLASS_SUBKEYS:
+            return [k for k, v in record.items() if isinstance(v, dict)]
+        elif lclass == LCLASS_ANY:
+            return list(record)
+        else:
+            raise HKVError.for_error('BADLCLASS')
 
     def put(self, path, value):
         record, key = self._split_follow_path(path, True)
