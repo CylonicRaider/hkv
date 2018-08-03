@@ -5,6 +5,8 @@
 In-memory hierarchical key-value store.
 """
 
+import struct
+
 ERRORS = {
     'NOKEY': (1, 'No such key'),
     'BADTYPE': (2, 'Invalid value type'),
@@ -12,6 +14,8 @@ ERRORS = {
     }
 
 ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
+
+INTEGER = struct.Struct('!I')
 
 class HKVError(Exception):
     @classmethod
@@ -77,3 +81,52 @@ class DataStore:
         record = self._follow_path(path)
         if not isinstance(record, dict): raise HKVError.for_error('BADTYPE')
         record.clear()
+
+class Codec:
+    def __init__(self, rfile, wfile):
+        self.rfile = rfile
+        self.wfile = wfile
+
+    def read_char(self):
+        return self.rfile.read(1)
+
+    def write_char(self, item):
+        self.wfile.write(item)
+
+    def read_int(self):
+        data = self.rfile.read(INTEGER.size)
+        return INTEGER.unpack(data)[0]
+
+    def write_int(self, item):
+        self.wfile.write(INTEGER.pack(item))
+
+    def read_bytes(self):
+        length = self.read_int()
+        return self.rfile.read(length)
+
+    def write_bytes(self, data):
+        self.write_int(len(data))
+        self.wfile.write(data)
+
+    def read_bytelist(self):
+        length = self.read_int()
+        ret = []
+        while length:
+            ret.append(self.read_bytes())
+            length -= 1
+        return ret
+
+    def write_bytelist(self, data):
+        self.write_int(len(data))
+        for item in data:
+            self.write_bytes(item)
+
+    def read_bytedict(self):
+        length = self.read_int()
+        ret = {}
+        while length:
+            key = self.read_bytes()
+            value = self.read_bytes()
+            ret[key] = value
+            length -= 1
+        return ret
