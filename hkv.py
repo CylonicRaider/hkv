@@ -34,7 +34,11 @@ class HKVError(Exception):
 
     @classmethod
     def for_code(cls, code):
-        return cls(ERRORS[ERROR_CODES[code]])
+        try:
+            description = ERRORS[ERROR_CODES[code]][1]
+        except KeyError:
+            description = 'Unknown error?!'
+        return cls(code, ERRORS[ERROR_CODES[code]])
 
     def __init__(self, code, message):
         Exception.__init__(self, 'code %s: %s' % (code, message))
