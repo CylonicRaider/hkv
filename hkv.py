@@ -96,7 +96,7 @@ class DataStore:
 
     def get_all(self, path):
         record = self._follow_path(path)
-        if not isinstance(ret, dict): raise HKVError.for_name('BADTYPE')
+        if not isinstance(record, dict): raise HKVError.for_name('BADTYPE')
         return {k: v for k, v in record.items() if not isinstance(v, dict)}
 
     def list(self, path, lclass):
@@ -145,7 +145,7 @@ class Codec:
             'c': self.write_char,
             'i': self.write_int,
             's': self.write_bytes,
-            'l': self.write_list,
+            'l': self.write_bytelist,
             'm': self.write_bytedict}
 
     def close(self):
@@ -214,6 +214,12 @@ class Codec:
             ret[key] = value
             length -= 1
         return ret
+
+    def write_bytedict(self, data):
+        self.write_int(len(data))
+        for k, v in data.items():
+            self.write_bytes(k)
+            self.write_bytes(v)
 
     def readf(self, format):
         if format.startswith('*'):
@@ -296,7 +302,7 @@ class Server:
                         operation = self.datastore._operations[cmd]
                         args = self.codec.readf(operation[0])
                         result = operation[1](*args)
-                        self.codec.wriote_char(operation[2].encode('ascii'))
+                        self.codec.write_char(operation[2].encode('ascii'))
                         self.codec.writef(operation[2], result)
                     else:
                         self.write_error('NOCMD')
