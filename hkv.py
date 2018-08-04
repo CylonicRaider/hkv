@@ -115,6 +115,18 @@ class Codec:
     def __init__(self, rfile, wfile):
         self.rfile = rfile
         self.wfile = wfile
+        self._rmap = {
+            'c': self.read_char,
+            'i': self.read_int,
+            's': self.read_bytes,
+            'l': self.read_bytelist,
+            'd': self.read_bytedict}
+        self._wmap = {
+            'c': self.write_char,
+            'i': self.write_int,
+            's': self.write_bytes,
+            'l': self.write_list,
+            'd': self.write_bytedict}
 
     def close(self):
         try:
@@ -127,13 +139,16 @@ class Codec:
             pass
 
     def read_char(self):
-        return self.rfile.read(1)
+        ret = self.rfile.read(1)
+        if len(ret) != 1: raise EOFError('Received end-of-file')
+        return ret
 
     def write_char(self, item):
         self.wfile.write(item)
 
     def read_int(self):
         data = self.rfile.read(INTEGER.size)
+        if len(data) != INTEGER.size: raise EOFError('Short read')
         return INTEGER.unpack(data)[0]
 
     def write_int(self, item):
@@ -141,7 +156,9 @@ class Codec:
 
     def read_bytes(self):
         length = self.read_int()
-        return self.rfile.read(length)
+        ret = self.rfile.read(length)
+        if len(ret) != length: raise EOFError('Short read')
+        return ret
 
     def write_bytes(self, data):
         self.write_int(len(data))
@@ -170,6 +187,18 @@ class Codec:
             length -= 1
         return ret
 
+    def read_types(self, *types):
+        ret = []
+        for t in types:
+            ret.append(self._rmap[t]())
+        return ret
+
+    def write_types(self, format, *args):
+        if len(args) != len(format):
+            raise TypeError('Invalid argument count for format string')
+        for t, a in zip(format, args):
+            self._wmap[t](a)
+
 class Server:
     class ClientHandler:
         def __init__(self, parent, conn, addr):
@@ -194,17 +223,20 @@ class Server:
                 pass
 
         def write_error(self, exc):
-            self.codec.write_byte(b'e')
             if isinstance(exc, HKVError):
-                self.codec.write_int(exc.code)
+                code = exc.code
             else:
-                self.codec.write_int(ERRORS['UNKNOWN'][0])
+                code = ERRORS['UNKNOWN'][0]
+            self.codec.write_types('ci', b'e', code)
 
         def main(self):
             try:
                 while 1:
-                    cmd = self.codec.read_byte()
-                    if not cmd or cmd == b'q':
+                    try:
+                        cmd = self.codec.read_char()
+                    except EOFError:
+                        break
+                    if cmd == b'q':
                         break
                     else:
                         self.write_error(HKVError.for_name('NOCMD'))
