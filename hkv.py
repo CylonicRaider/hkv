@@ -12,10 +12,11 @@ import socket
 ERRORS = {
     'UNKNOWN': (1, 'Unknown error'),
     'NOCMD': (2, 'No such command'),
-    'NOKEY': (3, 'No such key'),
-    'BADTYPE': (4, 'Invalid value type'),
-    'BADPATH': (5, 'Path too short'),
-    'BADLCLASS': (6, 'Bad listing class')
+    'NOSTORE': (3, 'No datastore opened'),
+    'NOKEY': (4, 'No such key'),
+    'BADTYPE': (5, 'Invalid value type'),
+    'BADPATH': (6, 'Path too short'),
+    'BADLCLASS': (7, 'Bad listing class')
     }
 
 ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
@@ -46,8 +47,19 @@ def spawn_thread(func, *args, **kwds):
     return thr
 
 class DataStore:
+    _OPKEYS = b'gGlpPdD'
+
     def __init__(self):
         self.data = {}
+        self._operations = {
+            b'g': ('l', self.get, 's'),
+            b'G': ('l', self.get_all, 'd'),
+            b'l': ('li', self.list, 'l'),
+            b'p': ('ls', self.put, '-'),
+            b'P': ('ld', self.put_all, '-'),
+            b'd': ('l', self.delete, '-'),
+            b'D': ('l', self.delete_all, '-')
+            }
 
     def _follow_path(self, path, create=False):
         cur = self.data
@@ -116,12 +128,14 @@ class Codec:
         self.rfile = rfile
         self.wfile = wfile
         self._rmap = {
+            '-': self.read_nothing,
             'c': self.read_char,
             'i': self.read_int,
             's': self.read_bytes,
             'l': self.read_bytelist,
             'd': self.read_bytedict}
         self._wmap = {
+            '-': self.write_nothing,
             'c': self.write_char,
             'i': self.write_int,
             's': self.write_bytes,
@@ -137,6 +151,14 @@ class Codec:
             self.wfile.close()
         except Exception:
             pass
+
+    def read_nothing(self):
+        return None
+
+    def write_nothing(self, value):
+        if value is not None:
+            raise TypeError('Non-None value passed to write_nothing()')
+        # NOP
 
     def read_char(self):
         ret = self.rfile.read(1)
@@ -222,6 +244,7 @@ class Server:
             self.addr = addr
             self.codec = Codec(self.conn.makefile('rb'),
                                self.conn.makefile('wb'))
+            self.datastore = None
 
         def close(self):
             try:
@@ -238,7 +261,9 @@ class Server:
                 pass
 
         def write_error(self, exc):
-            if isinstance(exc, HKVError):
+            if isinstance(exc, str):
+                code = ERRORS[exc][0]
+            elif isinstance(exc, HKVError):
                 code = exc.code
             else:
                 code = ERRORS['UNKNOWN'][0]
@@ -253,8 +278,16 @@ class Server:
                         break
                     if cmd == b'q':
                         break
+                    elif cmd in DataStore._OPKEYS:
+                        if self.datastore is None:
+                            self.write_error('NOSTORE')
+                            continue
+                        operation = self.datastore._operations[cmd]
+                        args = self.codec.readf(operation[0])
+                        result = operation[1](*args)
+                        self.codec.writef(operation[2], result)
                     else:
-                        self.write_error(HKVError.for_name('NOCMD'))
+                        self.write_error('NOCMD')
             finally:
                 self.close()
 
