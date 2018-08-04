@@ -278,6 +278,11 @@ class Server:
                         break
                     if cmd == b'q':
                         break
+                    elif cmd == b'o':
+                        name = self.codec.read_bytes()
+                        self.datastore = self.parent.get_datastore(name)
+                    elif cmd == b'c':
+                        self.datastore = None
                     elif cmd in DataStore._OPKEYS:
                         if self.datastore is None:
                             self.write_error('NOSTORE')
@@ -313,6 +318,14 @@ class Server:
             self.socket.close()
         except Exception:
             pass
+
+    def get_datastore(self, name):
+        try:
+            return self.datastores[name]
+        except KeyError:
+            ret = DataStore()
+            self.datastores[name] = ret
+            return ret
 
     def main(self):
         while 1:
