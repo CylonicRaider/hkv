@@ -6,12 +6,16 @@ In-memory hierarchical key-value store.
 """
 
 import struct
+import threading
+import socket
 
 ERRORS = {
-    'NOKEY': (1, 'No such key'),
-    'BADTYPE': (2, 'Invalid value type'),
-    'BADPATH': (3, 'Path too short'),
-    'BADLCLASS': (4, 'Bad listing class')
+    'UNKNOWN': (1, 'Unknown error'),
+    'NOCMD': (2, 'No such command'),
+    'NOKEY': (3, 'No such key'),
+    'BADTYPE': (4, 'Invalid value type'),
+    'BADPATH': (5, 'Path too short'),
+    'BADLCLASS': (6, 'Bad listing class')
     }
 
 ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
@@ -35,6 +39,12 @@ class HKVError(Exception):
         Exception.__init__(self, 'code %s: %s' % (code, message))
         self.code = code
 
+def spawn_thread(func, *args, **kwds):
+    thr = threading.Thread(target=func, args=args, kwargs=kwds)
+    thr.setDaemon(True)
+    thr.start()
+    return thr
+
 class DataStore:
     def __init__(self):
         self.data = {}
@@ -57,6 +67,9 @@ class DataStore:
         if not path: raise HKVError.for_error('BADPATH')
         prefix, last = path[:-1], path[-1]
         return self._follow_path(prefix, create), last
+
+    def close(self):
+        self.data = None
 
     def get(self, path):
         ret = self._follow_path(path)
@@ -103,6 +116,16 @@ class Codec:
         self.rfile = rfile
         self.wfile = wfile
 
+    def close(self):
+        try:
+            self.rfile.close()
+        except Exception:
+            pass
+        try:
+            self.wfile.close()
+        except Exception:
+            pass
+
     def read_char(self):
         return self.rfile.read(1)
 
@@ -146,3 +169,74 @@ class Codec:
             ret[key] = value
             length -= 1
         return ret
+
+class Server:
+    class ClientHandler:
+        def __init__(self, parent, conn, addr):
+            self.parent = parent
+            self.conn = conn
+            self.addr = addr
+            self.codec = Codec(self.conn.makefile('rb'),
+                               self.conn.makefile('wb'))
+
+        def close(self):
+            try:
+                self.conn.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                self.codec.close()
+            except Exception:
+                pass
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+
+        def write_error(self, exc):
+            self.codec.write_byte(b'e')
+            if isinstance(exc, HKVError):
+                self.codec.write_int(exc.code)
+            else:
+                self.codec.write_int(ERRORS['UNKNOWN'][0])
+
+        def main(self):
+            try:
+                while 1:
+                    cmd = self.codec.read_byte()
+                    if not cmd or cmd == b'q':
+                        break
+                    else:
+                        self.write_error(HKVError.for_error('NOCMD'))
+            finally:
+                self.close()
+
+    def __init__(self, addr, addrfamily=None):
+        if addrfamily is None: addrfamily = socket.AF_INET
+        self.addr = addr
+        self.addrfamily = addrfamily
+        self.socket = None
+        self.datastores = {}
+
+    def listen(self):
+        self.socket = socket.socket(self.addrfamily)
+        self.socket.bind(self.addr)
+        self.socket.listen()
+
+    def accept(self):
+        conn, addr = self.socket.accept()
+        handler = self.ClientHandler(self, conn, addr)
+        spawn_thread(handler.main)
+
+    def close(self):
+        try:
+            self.socket.close()
+        except Exception:
+            pass
+
+    def main(self):
+        while 1:
+            try:
+                self.accept()
+            except Exception:
+                pass
