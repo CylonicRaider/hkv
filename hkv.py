@@ -28,7 +28,7 @@ INTEGER = struct.Struct('!I')
 
 class HKVError(Exception):
     @classmethod
-    def for_error(cls, name):
+    def for_name(cls, name):
         return cls(*ERRORS[name])
 
     @classmethod
@@ -60,11 +60,11 @@ class DataStore:
                     cur[ent] = new
                     cur = new
                 else:
-                    raise HKVError.for_error('NOKEY')
+                    raise HKVError.for_name('NOKEY')
         return cur
 
     def _split_follow_path(self, path, create=False):
-        if not path: raise HKVError.for_error('BADPATH')
+        if not path: raise HKVError.for_name('BADPATH')
         prefix, last = path[:-1], path[-1]
         return self._follow_path(prefix, create), last
 
@@ -73,12 +73,12 @@ class DataStore:
 
     def get(self, path):
         ret = self._follow_path(path)
-        if isinstance(ret, dict): raise HKVError.for_error('BADTYPE')
+        if isinstance(ret, dict): raise HKVError.for_name('BADTYPE')
         return ret
 
     def get_all(self, path):
         record = self._follow_path(path)
-        if not isinstance(ret, dict): raise HKVError.for_error('BADTYPE')
+        if not isinstance(ret, dict): raise HKVError.for_name('BADTYPE')
         return {k: v for k, v in record.items() if not isinstance(v, dict)}
 
     def list(self, path, lclass):
@@ -90,7 +90,7 @@ class DataStore:
         elif lclass == LCLASS_ANY:
             return list(record)
         else:
-            raise HKVError.for_error('BADLCLASS')
+            raise HKVError.for_name('BADLCLASS')
 
     def put(self, path, value):
         record, key = self._split_follow_path(path, True)
@@ -104,11 +104,11 @@ class DataStore:
         try:
             del record[key]
         except KeyError:
-            raise HKVError.for_error('NOKEY')
+            raise HKVError.for_name('NOKEY')
 
     def delete_all(self, path):
         record = self._follow_path(path)
-        if not isinstance(record, dict): raise HKVError.for_error('BADTYPE')
+        if not isinstance(record, dict): raise HKVError.for_name('BADTYPE')
         record.clear()
 
 class Codec:
@@ -207,7 +207,7 @@ class Server:
                     if not cmd or cmd == b'q':
                         break
                     else:
-                        self.write_error(HKVError.for_error('NOCMD'))
+                        self.write_error(HKVError.for_name('NOCMD'))
             finally:
                 self.close()
 
