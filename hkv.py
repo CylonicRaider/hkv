@@ -47,19 +47,20 @@ def spawn_thread(func, *args, **kwds):
     return thr
 
 class DataStore:
-    _OPKEYS = b'gGlpPdD'
+    _OPERATIONS = {
+        b'g': ('l', 'get', 's'),
+        b'G': ('l', 'get_all', 'd'),
+        b'l': ('li', 'list', 'l'),
+        b'p': ('ls', 'put', '-'),
+        b'P': ('ld', 'put_all', '-'),
+        b'd': ('l', 'delete', '-'),
+        b'D': ('l', 'delete_all', '-')
+        }
 
     def __init__(self):
         self.data = {}
-        self._operations = {
-            b'g': ('l', self.get, 's'),
-            b'G': ('l', self.get_all, 'd'),
-            b'l': ('li', self.list, 'l'),
-            b'p': ('ls', self.put, '-'),
-            b'P': ('ld', self.put_all, '-'),
-            b'd': ('l', self.delete, '-'),
-            b'D': ('l', self.delete_all, '-')
-            }
+        self._operations = {k: (i, getattr(self, m), o)
+                            for k, (i, m, o) in self._OPERATIONS}
 
     def _follow_path(self, path, create=False):
         cur = self.data
@@ -283,7 +284,7 @@ class Server:
                         self.datastore = self.parent.get_datastore(name)
                     elif cmd == b'c':
                         self.datastore = None
-                    elif cmd in DataStore._OPKEYS:
+                    elif cmd in DataStore._OPERATIONS:
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                             continue
