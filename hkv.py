@@ -187,13 +187,28 @@ class Codec:
             length -= 1
         return ret
 
-    def read_types(self, *types):
+    def readf(self, format):
+        if format.startswith('*'):
+            single = False
+            format = format[1:]
+        else:
+            single = True
+            if len(format) != 1:
+                raise TypeError('* format string must contain exactly one '
+                    'character')
         ret = []
-        for t in types:
+        for t in format:
             ret.append(self._rmap[t]())
+        if single: ret = ret[0]
         return ret
 
-    def write_types(self, format, *args):
+    def writef(self, format, *args):
+        if format.startswith('*'):
+            format = format[1:]
+            if len(args) != 1:
+                raise TypeError('Need exactly one additional argument for * '
+                    'format string')
+            args = args[0]
         if len(args) != len(format):
             raise TypeError('Invalid argument count for format string')
         for t, a in zip(format, args):
@@ -227,7 +242,7 @@ class Server:
                 code = exc.code
             else:
                 code = ERRORS['UNKNOWN'][0]
-            self.codec.write_types('ci', b'e', code)
+            self.codec.writef('ci', b'e', code)
 
         def main(self):
             try:
