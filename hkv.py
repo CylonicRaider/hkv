@@ -12,11 +12,12 @@ import socket
 ERRORS = {
     'UNKNOWN': (1, 'Unknown error'),
     'NOCMD': (2, 'No such command'),
-    'NOSTORE': (3, 'No datastore opened'),
-    'NOKEY': (4, 'No such key'),
-    'BADTYPE': (5, 'Invalid value type'),
-    'BADPATH': (6, 'Path too short'),
-    'BADLCLASS': (7, 'Bad listing class')
+    'NORESP': (3, 'Unknown response'),
+    'NOSTORE': (4, 'No datastore opened'),
+    'NOKEY': (5, 'No such key'),
+    'BADTYPE': (6, 'Invalid value type'),
+    'BADPATH': (7, 'Path too short'),
+    'BADLCLASS': (8, 'Bad listing class')
     }
 
 ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
@@ -295,6 +296,7 @@ class Server:
                         operation = self.datastore._operations[cmd]
                         args = self.codec.readf(operation[0])
                         result = operation[1](*args)
+                        self.codec.wriote_char(operation[2].encode('ascii'))
                         self.codec.writef(operation[2], result)
                     else:
                         self.write_error('NOCMD')
@@ -338,3 +340,68 @@ class Server:
                 self.accept()
             except Exception:
                 pass
+
+class RemoteDataStore:
+    def __init__(self, addr, dsname, addrfamily=None):
+        if addrfamily is None: addrfamily = socket.AF_INET
+        self.addr = addr
+        self.dsname = dsname
+        self.addrfamily = addrfamily
+        self.socket = None
+        self.codec = None
+
+    def connect(self):
+        self.socket = socket.socket(self.addrfamily)
+        self.socket.connect(self.addr)
+        self.codec = Codec(self.socket.makefile('rb'),
+                           self.socket.makefile('wb'))
+
+    def close(self):
+        try:
+            self.socket.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        try:
+            self.codec.close()
+        except Exception:
+            pass
+        try:
+            self.socket.close()
+        except Exception:
+            pass
+
+    def _run_command(self, format, *args):
+        self.codec.writef(format, *args)
+        resp = self.codec.read_char()
+        if resp == b'e':
+            code = self.codec.read_int()
+            raise HKVError.for_code(code)
+        elif resp in b'slm':
+            return self.codec.readf(resp)
+        else:
+            raise HKVError.for_name('NORESP')
+
+    def _run_operation(self, opname, *args):
+        operation = DataStore._OPERATIONS[opname]
+        return self._run_command(operation[0], *args)
+
+    def get(self, path):
+        return self._run_operation(b'g', path)
+
+    def get_all(self, path):
+        return self._run_operation(b'G', path)
+
+    def list(self, path, lclass):
+        return self._run_operation(b'l', path, lclass)
+
+    def put(self, path, value):
+        return self._run_operation(b'p', path, value)
+
+    def put_all(self, path, values):
+        return self._run_operation(b'P', path, values)
+
+    def delete(self, path):
+        return self._run_operation(b'd', path)
+
+    def delete_all(self, path):
+        return self._run_operation(b'D', path)
