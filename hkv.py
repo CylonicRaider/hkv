@@ -53,7 +53,7 @@ def spawn_thread(func, *args, **kwds):
 class DataStore:
     _OPERATIONS = {
         b'g': ('l', 'get', 's'),
-        b'G': ('l', 'get_all', 'd'),
+        b'G': ('l', 'get_all', 'm'),
         b'l': ('li', 'list', 'l'),
         b'p': ('ls', 'put', '-'),
         b'P': ('ld', 'put_all', '-'),
@@ -138,14 +138,14 @@ class Codec:
             'i': self.read_int,
             's': self.read_bytes,
             'l': self.read_bytelist,
-            'd': self.read_bytedict}
+            'm': self.read_bytedict}
         self._wmap = {
             '-': self.write_nothing,
             'c': self.write_char,
             'i': self.write_int,
             's': self.write_bytes,
             'l': self.write_list,
-            'd': self.write_bytedict}
+            'm': self.write_bytedict}
 
     def close(self):
         try:
