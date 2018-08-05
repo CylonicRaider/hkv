@@ -573,6 +573,8 @@ def main():
                    help='Enter server mode (instead of client mode)')
     p.add_argument('--url', '-u',
                    help='URL to serve on / to connect to')
+    p.add_argument('--datastore', '-d',
+                   help='Datastore to use (client mode only)')
     p.add_argument('command', nargs='?',
                    help='Command to execute (client mode only)')
     p.add_argument('arg', nargs='*',
@@ -587,6 +589,8 @@ def main():
             params = parse_url(result.url)
     except ValueError:
         raise SystemExit('ERROR: Invalid hkv:// URL: %s' % result.url)
+    if result.datastore is not None:
+        params['dsname'] = result.datastore
     if result.listen:
         main_listen(params)
     else:
