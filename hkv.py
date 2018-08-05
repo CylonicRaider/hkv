@@ -214,6 +214,9 @@ class Codec:
         except Exception:
             pass
 
+    def flush(self):
+        self.wfile.flush()
+
     def read_nothing(self):
         return None
 
@@ -405,7 +408,9 @@ class Server:
                         self.codec.writef(operation[2], result)
                     else:
                         self.write_error('NOCMD')
+                    self.codec.flush()
             finally:
+                self.codec.flush()
                 self.unlock(True)
                 self.close()
 
@@ -498,6 +503,7 @@ class RemoteDataStore:
         with self._lock:
             self.codec.write_char(cmd)
             self.codec.writef(format, *args)
+            self.codec.flush()
             resp = self.codec.read_char()
             if resp == b'e':
                 code = self.codec.read_int()
