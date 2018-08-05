@@ -9,6 +9,11 @@ import struct
 import threading
 import socket
 
+try:
+    from urllib.parse import urlsplit
+except ImportError:
+    from urlparse import urlsplit
+
 ERRORS = {
     'UNKNOWN': (1, 'Unknown error'),
     'NOCMD': (2, 'No such command'),
@@ -26,6 +31,9 @@ ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
 LCLASS_BYTES = 1
 LCLASS_SUBKEYS = 2
 LCLASS_ANY = 3
+
+# 8311 is delta-encoded from the alphabet indices of H, K, and V.
+DEFAULT_ADDRESS = ('localhost', 8311)
 
 INTEGER = struct.Struct('!I')
 
@@ -45,6 +53,32 @@ class HKVError(Exception):
     def __init__(self, code, message):
         Exception.__init__(self, 'code %s: %s' % (code, message))
         self.code = code
+
+def parse_url(url):
+    parts = urlsplit(url)
+    if parts.scheme != 'hkv':
+        raise ValueError('Invalid hkv:// URL')
+    host, port = parts.hostname, parts.port
+    if host is None:
+        host = DEFAULT_ADDRESS[0]
+    if port is None:
+        port = DEFAULT_ADDRESS[1]
+    if host.startswith('[') and host.endswith(']') or ':' in host:
+        addrfamily = socket.AF_INET6
+    else:
+        addrfamily = socket.AF_INET
+    pathparts = parts.path.split('/')
+    if len(pathparts) > 2:
+        raise ValueError('Invalid hkv:// URL')
+    elif pathparts[0] != 0:
+        raise RuntimeError('URL parsing failed?!')
+    elif len(pathparts) == 1 or not pathparts[1]:
+        dsname = None
+    else:
+        dsname = pathparts[1]
+    ret = {'addrfamily': addrfamily, 'addr': addr}
+    if dsname is not None: ret['dsname'] = dsname
+    return ret
 
 def spawn_thread(func, *args, **kwds):
     thr = threading.Thread(target=func, args=args, kwargs=kwds)
