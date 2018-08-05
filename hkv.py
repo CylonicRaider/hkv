@@ -76,7 +76,7 @@ def parse_url(url):
         dsname = None
     else:
         dsname = pathparts[1]
-    ret = {'addrfamily': addrfamily, 'addr': addr}
+    ret = {'addrfamily': addrfamily, 'addr': (host, port)}
     if dsname is not None: ret['dsname'] = dsname
     return ret
 
@@ -99,7 +99,7 @@ class DataStore:
 
     def __init__(self):
         self.data = {}
-        self.lock = threading.RLock()
+        self._lock = threading.RLock()
         self._operations = {k: (i, getattr(self, m), o)
                             for k, (i, m, o) in self._OPERATIONS}
 
@@ -123,11 +123,11 @@ class DataStore:
         return self._follow_path(prefix, create), last
 
     def lock(self):
-        self.lock.acquire()
+        self._lock.acquire()
 
     def unlock(self):
         try:
-            self.lock.release()
+            self._lock.release()
         except RuntimeError:
             raise HKVError.for_name('BADUNLOCK')
 
@@ -135,13 +135,13 @@ class DataStore:
         self.data = None
 
     def get(self, path):
-        with self.lock:
+        with self._lock:
             ret = self._follow_path(path)
             if isinstance(ret, dict): raise HKVError.for_name('BADTYPE')
             return ret
 
     def get_all(self, path):
-        with self.lock:
+        with self._lock:
             record = self._follow_path(path)
             if not isinstance(record, dict):
                 raise HKVError.for_name('BADTYPE')
@@ -149,7 +149,7 @@ class DataStore:
                     if not isinstance(v, dict)}
 
     def list(self, path, lclass):
-        with self.lock:
+        with self._lock:
             record = self._follow_path(path)
             if lclass == LCLASS_BYTES:
                 return [k for k, v in record.items()
@@ -162,7 +162,7 @@ class DataStore:
                 raise HKVError.for_name('BADLCLASS')
 
     def put(self, path, value):
-        with self.lock:
+        with self._lock:
             record, key = self._split_follow_path(path, True)
             record[key] = value
 
@@ -170,7 +170,7 @@ class DataStore:
         self.put(path, values)
 
     def delete(self, path):
-        with self.lock:
+        with self._lock:
             record, key = self._split_follow_path(path)
             try:
                 del record[key]
@@ -178,7 +178,7 @@ class DataStore:
                 raise HKVError.for_name('NOKEY')
 
     def delete_all(self, path):
-        with self.lock:
+        with self._lock:
             record = self._follow_path(path)
             if not isinstance(record, dict):
                 raise HKVError.for_name('BADTYPE')
@@ -363,28 +363,28 @@ class Server:
                     except EOFError:
                         break
                     if cmd == b'q':
-                        self.write_char(b'-')
+                        self.codec.write_char(b'-')
                         break
                     elif cmd == b'o':
                         self.unlock(True)
                         name = self.codec.read_bytes()
                         self.datastore = self.parent.get_datastore(name)
-                        self.write_char(b'-')
+                        self.codec.write_char(b'-')
                     elif cmd == b'c':
                         self.unlock(True)
                         self.datastore = None
-                        self.write_char(b'-')
+                        self.codec.write_char(b'-')
                     elif cmd == b'l':
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                         self.lock()
-                        self.write_char(b'-')
+                        self.codec.write_char(b'-')
                     elif cmd == b'u':
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                         try:
                             self.unlock()
-                            self.write_char(b'-')
+                            self.codec.write_char(b'-')
                         except HKVError as exc:
                             self.write_error(exc)
                     elif cmd in DataStore._OPERATIONS:
@@ -448,17 +448,17 @@ class RemoteDataStore:
         self.addrfamily = addrfamily
         self.socket = None
         self.codec = None
-        self.lock = threading.RLock()
+        self._lock = threading.RLock()
 
     def __enter__(self):
-        self.lock.__enter__()
+        self._lock.__enter__()
         self.lock()
 
     def __exit__(self, *args):
         try:
             self.unlock()
         finally:
-            self.lock.__exit__(*args)
+            self._lock.__exit__(*args)
 
     def connect(self):
         self.socket = socket.socket(self.addrfamily)
@@ -481,7 +481,7 @@ class RemoteDataStore:
             pass
 
     def _run_command(self, cmd, format, *args):
-        with self.lock:
+        with self._lock:
             self.codec.write_char(cmd)
             self.codec.writef(format, *args)
             resp = self.codec.read_char()
