@@ -558,6 +558,8 @@ def main_command(params, command, *args):
             k, _, v = item.encode('utf-8').partition(b'=')
             values[k] = v
         cmdargs = (values,)
+    else:
+        raise SystemExit('ERROR: Unknown command: %s' % command)
     path = args[0].encode('utf-8').split(b'/')
     # Create client and execute command
     client = RemoteDataStore(**params)
