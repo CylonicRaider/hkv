@@ -329,23 +329,28 @@ class Server:
                     except EOFError:
                         break
                     if cmd == b'q':
+                        self.write_char(b'-')
                         break
                     elif cmd == b'o':
                         self.unlock(True)
                         name = self.codec.read_bytes()
                         self.datastore = self.parent.get_datastore(name)
+                        self.write_char(b'-')
                     elif cmd == b'c':
                         self.unlock(True)
                         self.datastore = None
+                        self.write_char(b'-')
                     elif cmd == b'l':
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                         self.lock()
+                        self.write_char(b'-')
                     elif cmd == b'u':
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                         try:
                             self.unlock()
+                            self.write_char(b'-')
                         except HKVError as exc:
                             self.write_error(exc)
                     elif cmd in DataStore._OPERATIONS:
@@ -439,7 +444,7 @@ class RemoteDataStore:
             if resp == b'e':
                 code = self.codec.read_int()
                 raise HKVError.for_code(code)
-            elif resp in b'slm':
+            elif resp in b'slm-':
                 return self.codec.readf(resp)
             else:
                 raise HKVError.for_name('NORESP')
