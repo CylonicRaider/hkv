@@ -30,8 +30,8 @@ ERRORS = {
 
 ERROR_CODES = {code: name for name, (code, desc) in ERRORS.items()}
 
-LCLASS_BYTES = 1
-LCLASS_SUBKEYS = 2
+LCLASS_VALUE = 1
+LCLASS_NESTEDS = 2
 LCLASS_ANY = 3
 
 # 8311 is delta-encoded from the alphabet indices of H, K, and V.
@@ -153,10 +153,10 @@ class DataStore:
     def list(self, path, lclass):
         with self._lock:
             record = self._follow_path(path)
-            if lclass == LCLASS_BYTES:
+            if lclass == LCLASS_VALUE:
                 return [k for k, v in record.items()
                         if not isinstance(v, dict)]
-            elif lclass == LCLASS_SUBKEYS:
+            elif lclass == LCLASS_NESTEDS:
                 return [k for k, v in record.items() if isinstance(v, dict)]
             elif lclass == LCLASS_ANY:
                 return list(record)
@@ -593,6 +593,20 @@ def main_command(params, nullterm, command, *args):
     if command in ('get', 'get_all', 'delete', 'delete_all'):
         ensure_args(1, 1)
         cmdargs = ()
+    elif command == 'list':
+        ensure_args(2, 2)
+        flags = 0
+        for char in args[1]:
+            if char == 'v':
+                flags |= LCLASS_VALUE
+            elif char == 'n':
+                flags |= LCLASS_NESTED
+            elif char == 'a':
+                flags |= LCLASS_ANY
+            else:
+                raise SystemExit('ERROR: Unrecognized listing class '
+                    'character: %s' % char)
+        cmdargs = [flags]
     elif command == 'put':
         ensure_args(2, 2)
         cmdargs = (args[1].encode('utf-8'),)
