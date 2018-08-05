@@ -17,7 +17,8 @@ ERRORS = {
     'NOKEY': (5, 'No such key'),
     'BADTYPE': (6, 'Invalid value type'),
     'BADPATH': (7, 'Path too short'),
-    'BADLCLASS': (8, 'Bad listing class')
+    'BADLCLASS': (8, 'Bad listing class'),
+    'BADUNLOCK': (9, 'Unpaired unlock')
     }
 
 ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
@@ -64,6 +65,7 @@ class DataStore:
 
     def __init__(self):
         self.data = {}
+        self.lock = threading.RLock()
         self._operations = {k: (i, getattr(self, m), o)
                             for k, (i, m, o) in self._OPERATIONS}
 
@@ -86,48 +88,67 @@ class DataStore:
         prefix, last = path[:-1], path[-1]
         return self._follow_path(prefix, create), last
 
+    def lock(self):
+        self.lock.acquire()
+
+    def unlock(self):
+        try:
+            self.lock.release()
+        except RuntimeError:
+            raise HKVError.for_name('BADUNLOCK')
+
     def close(self):
         self.data = None
 
     def get(self, path):
-        ret = self._follow_path(path)
-        if isinstance(ret, dict): raise HKVError.for_name('BADTYPE')
-        return ret
+        with self.lock:
+            ret = self._follow_path(path)
+            if isinstance(ret, dict): raise HKVError.for_name('BADTYPE')
+            return ret
 
     def get_all(self, path):
-        record = self._follow_path(path)
-        if not isinstance(record, dict): raise HKVError.for_name('BADTYPE')
-        return {k: v for k, v in record.items() if not isinstance(v, dict)}
+        with self.lock:
+            record = self._follow_path(path)
+            if not isinstance(record, dict):
+                raise HKVError.for_name('BADTYPE')
+            return {k: v for k, v in record.items()
+                    if not isinstance(v, dict)}
 
     def list(self, path, lclass):
-        record = self._follow_path(path)
-        if lclass == LCLASS_BYTES:
-            return [k for k, v in record.items() if not isinstance(v, dict)]
-        elif lclass == LCLASS_SUBKEYS:
-            return [k for k, v in record.items() if isinstance(v, dict)]
-        elif lclass == LCLASS_ANY:
-            return list(record)
-        else:
-            raise HKVError.for_name('BADLCLASS')
+        with self.lock:
+            record = self._follow_path(path)
+            if lclass == LCLASS_BYTES:
+                return [k for k, v in record.items()
+                        if not isinstance(v, dict)]
+            elif lclass == LCLASS_SUBKEYS:
+                return [k for k, v in record.items() if isinstance(v, dict)]
+            elif lclass == LCLASS_ANY:
+                return list(record)
+            else:
+                raise HKVError.for_name('BADLCLASS')
 
     def put(self, path, value):
-        record, key = self._split_follow_path(path, True)
-        record[key] = value
+        with self.lock:
+            record, key = self._split_follow_path(path, True)
+            record[key] = value
 
     def put_all(self, path, values):
         self.put(path, values)
 
     def delete(self, path):
-        record, key = self._split_follow_path(path)
-        try:
-            del record[key]
-        except KeyError:
-            raise HKVError.for_name('NOKEY')
+        with self.lock:
+            record, key = self._split_follow_path(path)
+            try:
+                del record[key]
+            except KeyError:
+                raise HKVError.for_name('NOKEY')
 
     def delete_all(self, path):
-        record = self._follow_path(path)
-        if not isinstance(record, dict): raise HKVError.for_name('BADTYPE')
-        record.clear()
+        with self.lock:
+            record = self._follow_path(path)
+            if not isinstance(record, dict):
+                raise HKVError.for_name('BADTYPE')
+            record.clear()
 
 class Codec:
     def __init__(self, rfile, wfile):
@@ -257,6 +278,7 @@ class Server:
             self.codec = Codec(self.conn.makefile('rb'),
                                self.conn.makefile('wb'))
             self.datastore = None
+            self.locked = 0
 
         def close(self):
             try:
@@ -271,6 +293,24 @@ class Server:
                 self.conn.close()
             except Exception:
                 pass
+
+        def lock(self):
+            if self.locked == 0:
+                self.datastore.lock()
+            self.locked += 1
+
+        def unlock(self, full=False):
+            if full:
+                if self.locked > 0 and self.datastore:
+                    self.datastore.unlock()
+                self.locked = 0
+            elif self.locked == 0:
+                raise HKVError.for_name('BADUNLOCK')
+            elif self.locked == 1:
+                self.locked = 0
+                self.datastore.unlock()
+            else:
+                self.locked -= 1
 
         def write_error(self, exc):
             if isinstance(exc, str):
@@ -291,10 +331,23 @@ class Server:
                     if cmd == b'q':
                         break
                     elif cmd == b'o':
+                        self.unlock(True)
                         name = self.codec.read_bytes()
                         self.datastore = self.parent.get_datastore(name)
                     elif cmd == b'c':
+                        self.unlock(True)
                         self.datastore = None
+                    elif cmd == b'l':
+                        if self.datastore is None:
+                            self.write_error('NOSTORE')
+                        self.lock()
+                    elif cmd == b'u':
+                        if self.datastore is None:
+                            self.write_error('NOSTORE')
+                        try:
+                            self.unlock()
+                        except HKVError as exc:
+                            self.write_error(exc)
                     elif cmd in DataStore._OPERATIONS:
                         if self.datastore is None:
                             self.write_error('NOSTORE')
@@ -307,6 +360,7 @@ class Server:
                     else:
                         self.write_error('NOCMD')
             finally:
+                self.unlock(True)
                 self.close()
 
     def __init__(self, addr, addrfamily=None):
@@ -355,6 +409,7 @@ class RemoteDataStore:
         self.addrfamily = addrfamily
         self.socket = None
         self.codec = None
+        self.lock = threading.RLock()
 
     def connect(self):
         self.socket = socket.socket(self.addrfamily)
@@ -376,20 +431,28 @@ class RemoteDataStore:
         except Exception:
             pass
 
-    def _run_command(self, format, *args):
-        self.codec.writef(format, *args)
-        resp = self.codec.read_char()
-        if resp == b'e':
-            code = self.codec.read_int()
-            raise HKVError.for_code(code)
-        elif resp in b'slm':
-            return self.codec.readf(resp)
-        else:
-            raise HKVError.for_name('NORESP')
+    def _run_command(self, cmd, format, *args):
+        with self.lock:
+            self.codec.write_char(cmd)
+            self.codec.writef(format, *args)
+            resp = self.codec.read_char()
+            if resp == b'e':
+                code = self.codec.read_int()
+                raise HKVError.for_code(code)
+            elif resp in b'slm':
+                return self.codec.readf(resp)
+            else:
+                raise HKVError.for_name('NORESP')
 
     def _run_operation(self, opname, *args):
         operation = DataStore._OPERATIONS[opname]
-        return self._run_command(operation[0], *args)
+        return self._run_command(opname, operation[0], *args)
+
+    def lock(self):
+        return self._run_command(b'l', '')
+
+    def unlock(self):
+        return self._run_command(b'u', '')
 
     def get(self, path):
         return self._run_operation(b'g', path)
