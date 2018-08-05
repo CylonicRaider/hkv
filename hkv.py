@@ -90,14 +90,14 @@ def spawn_thread(func, *args, **kwds):
 
 class DataStore:
     _OPERATIONS = {
-        b'g': ('l', 'get', 's'),
-        b'G': ('l', 'get_all', 'm'),
-        b'l': ('li', 'list', 'l'),
-        b'p': ('ls', 'put', '-'),
-        b'P': ('lm', 'put_all', '-'),
-        b'r': ('lm', 'replace', '-'),
-        b'd': ('l', 'delete', '-'),
-        b'D': ('l', 'delete_all', '-')}
+        b'g': ('a', 'get', 's'),
+        b'G': ('a', 'get_all', 'm'),
+        b'l': ('ai', 'list', 'a'),
+        b'p': ('as', 'put', '-'),
+        b'P': ('am', 'put_all', '-'),
+        b'r': ('am', 'replace', '-'),
+        b'd': ('a', 'delete', '-'),
+        b'D': ('a', 'delete_all', '-')}
 
     def __init__(self):
         self.data = {}
@@ -171,6 +171,8 @@ class DataStore:
     def put_all(self, path, values):
         with self._lock:
             record = self._follow_path(path, True)
+            if not isinstance(record, dict):
+                raise HKVError.for_name('BADTYPE')
             for k, v in values.items():
                 record[k] = v
 
@@ -201,14 +203,14 @@ class Codec:
             'c': self.read_char,
             'i': self.read_int,
             's': self.read_bytes,
-            'l': self.read_bytelist,
+            'a': self.read_bytelist,
             'm': self.read_bytedict}
         self._wmap = {
             '-': self.write_nothing,
             'c': self.write_char,
             'i': self.write_int,
             's': self.write_bytes,
-            'l': self.write_bytelist,
+            'a': self.write_bytelist,
             'm': self.write_bytedict}
 
     def close(self):
