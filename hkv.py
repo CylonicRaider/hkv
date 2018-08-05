@@ -94,7 +94,7 @@ class DataStore:
         b'G': ('l', 'get_all', 'm'),
         b'l': ('li', 'list', 'l'),
         b'p': ('ls', 'put', '-'),
-        b'P': ('ld', 'put_all', '-'),
+        b'P': ('lm', 'put_all', '-'),
         b'd': ('l', 'delete', '-'),
         b'D': ('l', 'delete_all', '-')
         }
