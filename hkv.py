@@ -76,7 +76,7 @@ def parse_url(url):
     elif len(pathparts) == 1 or not pathparts[1]:
         dsname = None
     else:
-        dsname = pathparts[1]
+        dsname = pathparts[1].encode('utf-8')
     ret = {'addrfamily': addrfamily, 'addr': (host, port)}
     if dsname is not None: ret['dsname'] = dsname
     return ret
@@ -102,7 +102,7 @@ class DataStore:
         self.data = {}
         self._lock = threading.RLock()
         self._operations = {k: (i, getattr(self, m), o)
-                            for k, (i, m, o) in self._OPERATIONS}
+                            for k, (i, m, o) in self._OPERATIONS.items()}
 
     def _follow_path(self, path, create=False):
         cur = self.data
@@ -398,15 +398,22 @@ class Server:
                         except HKVError as exc:
                             self.write_error(exc)
                     elif cmd in DataStore._OPERATIONS:
-                        operation = DataStore._OPERATIONS[cmd]
-                        args = self.codec.readf(operation[0])
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                             self.codec.flush()
                             continue
-                        result = self.datastore._operations[cmd][1](*args)
-                        self.codec.write_char(operation[2].encode('ascii'))
-                        self.codec.writef(operation[2], result)
+                        try:
+                            operation = DataStore._OPERATIONS[cmd]
+                            args = self.codec.readf(operation[0])
+                            if self.datastore is None:
+                                raise HKVError.from_name('NOSTORE')
+                            result = self.datastore._operations[cmd][1](*args)
+                        except HKVError as exc:
+                            self.write_error(exc)
+                        else:
+                            resp = operation[2].encode('ascii')
+                            self.codec.write_char(resp)
+                            self.codec.writef(operation[2], result)
                     else:
                         self.write_error('NOCMD')
                     self.codec.flush()
@@ -461,7 +468,7 @@ class Server:
                 pass
 
 class RemoteDataStore:
-    def __init__(self, addr, dsname, addrfamily=None):
+    def __init__(self, addr, dsname=None, addrfamily=None):
         if addrfamily is None: addrfamily = socket.AF_INET
         self.addr = addr
         self.dsname = dsname
@@ -485,6 +492,10 @@ class RemoteDataStore:
         self.socket.connect(self.addr)
         self.codec = Codec(self.socket.makefile('rb'),
                            self.socket.makefile('wb'))
+        if self.dsname is not None: self.open(self.dsname)
+
+    def open(self, dsname):
+        self._run_command(b'o', 's', dsname)
 
     def close(self):
         try:
@@ -510,7 +521,7 @@ class RemoteDataStore:
                 code = self.codec.read_int()
                 raise HKVError.for_code(code)
             elif resp in b'slm-':
-                return self.codec.readf(resp)
+                return self.codec.readf(resp.decode('ascii'))
             else:
                 raise HKVError.for_name('NORESP')
 
@@ -623,7 +634,7 @@ def main():
     except ValueError:
         raise SystemExit('ERROR: Invalid hkv:// URL: %s' % result.url)
     if result.datastore is not None:
-        params['dsname'] = result.datastore
+        params['dsname'] = result.datastore.encode('utf-8')
     if result.listen:
         main_listen(params, result.no_timestamps, result.loglevel)
     else:
