@@ -95,9 +95,9 @@ class DataStore:
         b'l': ('li', 'list', 'l'),
         b'p': ('ls', 'put', '-'),
         b'P': ('lm', 'put_all', '-'),
+        b'r': ('lm', 'replace', '-'),
         b'd': ('l', 'delete', '-'),
-        b'D': ('l', 'delete_all', '-')
-        }
+        b'D': ('l', 'delete_all', '-')}
 
     def __init__(self):
         self.data = {}
@@ -169,6 +169,12 @@ class DataStore:
             record[key] = value
 
     def put_all(self, path, values):
+        with self._lock:
+            record = self._follow_path(path, True)
+            for k, v in values.items():
+                record[k] = v
+
+    def replace(self, path, values):
         self.put(path, values)
 
     def delete(self, path):
@@ -547,6 +553,9 @@ class RemoteDataStore:
     def put_all(self, path, values):
         return self._run_operation(b'P', path, values)
 
+    def replace(self, path, values):
+        return self._run_operation(b'r', path, values)
+
     def delete(self, path):
         return self._run_operation(b'd', path)
 
@@ -585,7 +594,7 @@ def main_command(params, nullterm, command, *args):
     elif command == 'put':
         ensure_args(2, 2)
         cmdargs = (args[1].encode('utf-8'),)
-    elif command == 'put_all':
+    elif command in ('put_all', 'replace'):
         ensure_args(1)
         values = {}
         for item in args[1:]:
