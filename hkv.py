@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python3
 # -*- coding: ascii -*-
 
 """
@@ -70,7 +70,7 @@ def parse_url(url):
     pathparts = parts.path.split('/')
     if len(pathparts) > 2:
         raise ValueError('Invalid hkv:// URL')
-    elif pathparts[0] != 0:
+    elif pathparts[0] != '':
         raise RuntimeError('URL parsing failed?!')
     elif len(pathparts) == 1 or not pathparts[1]:
         dsname = None
@@ -412,7 +412,7 @@ class Server:
     def listen(self):
         self.socket = socket.socket(self.addrfamily)
         self.socket.bind(self.addr)
-        self.socket.listen()
+        self.socket.listen(5)
 
     def accept(self):
         conn, addr = self.socket.accept()
@@ -437,7 +437,7 @@ class Server:
         while 1:
             try:
                 self.accept()
-            except Exception:
+            except IOError:
                 pass
 
 class RemoteDataStore:
@@ -523,3 +523,73 @@ class RemoteDataStore:
 
     def delete_all(self, path):
         return self._run_operation(b'D', path)
+
+def main_listen(params):
+    if 'dsname' in params:
+        raise SystemExit('ERROR: Must not specify datastore name when '
+            'listening')
+    server = Server(**params)
+    server.listen()
+    try:
+        server.main()
+    except KeyboardInterrupt:
+        pass
+
+def main_command(params, command, *args):
+    def ensure_args(min=1, max=None):
+        if len(args) < min:
+            raise SystemExit('ERROR: Too few arguments for %s' % command)
+        if max is not None and len(args) > max:
+            raise SystemExit('ERROR: Too many arguments for %s' % command)
+    if 'dsname' not in params:
+        raise SystemExit('ERROR: Must specify datastore name when connecting')
+    # Parse command line
+    if command in ('get', 'get_all', 'delete', 'delete_all'):
+        ensure_args(1, 1)
+        cmdargs = ()
+    elif command == 'put':
+        ensure_args(2, 2)
+        cmdarks = (args[1].encode('utf-8'),)
+    elif command == 'put_all':
+        ensure_args(1)
+        values = {}
+        for item in args[1:]:
+            k, _, v = item.encode('utf-8').partition(b'=')
+            values[k] = v
+        cmdargs = (values,)
+    path = args[0].encode('utf-8').split(b'/')
+    # Create client and execute command
+    client = RemoteDataStore(**params)
+    client.connect()
+    try:
+        getattr(client, command)(path, *cmdargs)
+    finally:
+        client.close()
+
+def main():
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument('--listen', '-l', action='store_true',
+                   help='Enter server mode (instead of client mode)')
+    p.add_argument('--url', '-u',
+                   help='URL to serve on / to connect to')
+    p.add_argument('command', nargs='?',
+                   help='Command to execute (client mode only)')
+    p.add_argument('arg', nargs='*',
+                   help='Additional arguments to the command')
+    result = p.parse_args()
+    if bool(result.listen) == bool(result.command):
+        raise SystemExit('ERROR: Must specify either -l or command.')
+    try:
+        if result.url is None:
+            params = {'addr': DEFAULT_ADDRESS}
+        else:
+            params = parse_url(result.url)
+    except ValueError:
+        raise SystemExit('ERROR: Invalid hkv:// URL: %s' % result.url)
+    if result.listen:
+        main_listen(params)
+    else:
+        main_command(params, result.command, *result.arg)
+
+if __name__ == '__main__': main()
