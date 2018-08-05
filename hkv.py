@@ -600,9 +600,14 @@ def main_command(params, command, *args):
     path = args[0].encode('utf-8').split(b'/')
     # Create client and execute command
     client = RemoteDataStore(**params)
-    client.connect()
+    try:
+        client.connect()
+    except IOError as exc:
+        raise SystemExit('ERROR: %s' % exc)
     try:
         getattr(client, command)(path, *cmdargs)
+    except HKVError as exc:
+        raise SystemExit('ERROR: %s' % exc)
     finally:
         client.close()
 
