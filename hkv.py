@@ -393,12 +393,12 @@ class Server:
                         self.unlock(True)
                         self.datastore = None
                         self.codec.write_char(b'-')
-                    elif cmd == b'l':
+                    elif cmd == b'b':
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                         self.lock()
                         self.codec.write_char(b'-')
-                    elif cmd == b'u':
+                    elif cmd == b'f':
                         if self.datastore is None:
                             self.write_error('NOSTORE')
                         try:
@@ -535,10 +535,10 @@ class RemoteDataStore:
         return self._run_command(opname, operation[0], *args)
 
     def lock(self):
-        return self._run_command(b'l', '')
+        return self._run_command(b'b', '')
 
     def unlock(self):
-        return self._run_command(b'u', '')
+        return self._run_command(b'f', '')
 
     def get(self, path):
         return self._run_operation(b'g', path)
