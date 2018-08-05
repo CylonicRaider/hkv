@@ -416,6 +416,16 @@ class RemoteDataStore:
         self.codec = None
         self.lock = threading.RLock()
 
+    def __enter__(self):
+        self.lock.__enter__()
+        self.lock()
+
+    def __exit__(self, *args):
+        try:
+            self.unlock()
+        finally:
+            self.lock.__exit__(*args)
+
     def connect(self):
         self.socket = socket.socket(self.addrfamily)
         self.socket.connect(self.addr)
