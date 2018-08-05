@@ -8,6 +8,7 @@ In-memory hierarchical key-value store.
 import struct
 import threading
 import socket
+import logging
 
 try:
     from urllib.parse import urlsplit
@@ -305,16 +306,22 @@ class Codec:
 
 class Server:
     class ClientHandler:
-        def __init__(self, parent, conn, addr):
+        def __init__(self, parent, id, conn, addr):
             self.parent = parent
+            self.id = id
             self.conn = conn
             self.addr = addr
             self.codec = Codec(self.conn.makefile('rb'),
                                self.conn.makefile('wb'))
             self.datastore = None
             self.locked = 0
+            self.logger = logging.getLogger('client/%s' % self.id)
+
+        def init(self):
+            self.logger.info('Connection from %s', self.addr)
 
         def close(self):
+            self.logger.info('Closing')
             try:
                 self.conn.shutdown(socket.SHUT_RDWR)
             except Exception:
@@ -408,8 +415,11 @@ class Server:
         self.addrfamily = addrfamily
         self.socket = None
         self.datastores = {}
+        self._next_id = 1
+        self.logger = logging.getLogger('server')
 
     def listen(self):
+        self.logger.info('Listening on %s', self.addr)
         self.socket = socket.socket(self.addrfamily)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(self.addr)
@@ -417,10 +427,13 @@ class Server:
 
     def accept(self):
         conn, addr = self.socket.accept()
-        handler = self.ClientHandler(self, conn, addr)
+        handler = self.ClientHandler(self, self._next_id, conn, addr)
+        self._next_id += 1
+        handler.init()
         spawn_thread(handler.main)
 
     def close(self):
+        self.logger.info('Closing')
         try:
             self.socket.close()
         except Exception:
@@ -525,10 +538,16 @@ class RemoteDataStore:
     def delete_all(self, path):
         return self._run_operation(b'D', path)
 
-def main_listen(params):
+def main_listen(params, no_timestamps, loglevel):
     if 'dsname' in params:
         raise SystemExit('ERROR: Must not specify datastore name when '
             'listening')
+    if no_timestamps:
+        logging.basicConfig(format='[%(name)s %(levelname)s] %(message)s',
+                            level=loglevel)
+    else:
+        logging.basicConfig(format='[%(asctime)s %(name)s %(levelname)s] '
+            '%(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=loglevel)
     server = Server(**params)
     server.listen()
     try:
@@ -578,6 +597,10 @@ def main():
                    help='URL to serve on / to connect to')
     p.add_argument('--datastore', '-d',
                    help='Datastore to use (client mode only)')
+    p.add_argument('--no-timestamps', action='store_true',
+                   help='no timestamps on logs')
+    p.add_argument('--loglevel', default='INFO',
+                   help='Logging level (defaults to INFO)')
     p.add_argument('command', nargs='?',
                    help='Command to execute (client mode only)')
     p.add_argument('arg', nargs='*',
@@ -595,7 +618,7 @@ def main():
     if result.datastore is not None:
         params['dsname'] = result.datastore
     if result.listen:
-        main_listen(params)
+        main_listen(params, result.no_timestamps, result.loglevel)
     else:
         main_command(params, result.command, *result.arg)
 
