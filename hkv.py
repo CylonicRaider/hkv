@@ -31,7 +31,7 @@ ERRORS = {
 ERROR_CODES = {code: name for name, (code, desc) in ERRORS.items()}
 
 LCLASS_VALUE = 1
-LCLASS_NESTEDS = 2
+LCLASS_NESTED = 2
 LCLASS_ANY = 3
 
 # 8311 is delta-encoded from the alphabet indices of H, K, and V.
@@ -153,10 +153,12 @@ class DataStore:
     def list(self, path, lclass):
         with self._lock:
             record = self._follow_path(path)
-            if lclass == LCLASS_VALUE:
+            if not isinstance(record, dict):
+                raise HKVError.for_name('BADTYPE')
+            elif lclass == LCLASS_VALUE:
                 return [k for k, v in record.items()
                         if not isinstance(v, dict)]
-            elif lclass == LCLASS_NESTEDS:
+            elif lclass == LCLASS_NESTED:
                 return [k for k, v in record.items() if isinstance(v, dict)]
             elif lclass == LCLASS_ANY:
                 return list(record)
@@ -525,7 +527,7 @@ class RemoteDataStore:
             if resp == b'e':
                 code = self.codec.read_int()
                 raise HKVError.for_code(code)
-            elif resp in b'slm-':
+            elif resp in b'sam-':
                 return self.codec.readf('@' + resp.decode('ascii'))
             else:
                 raise HKVError.for_name('NORESP')
