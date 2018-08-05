@@ -17,7 +17,7 @@ ERRORS = {
     'NOKEY': (5, 'No such key'),
     'BADTYPE': (6, 'Invalid value type'),
     'BADPATH': (7, 'Path too short'),
-    'BADLCLASS': (8, 'Bad listing class'),
+    'BADLCLASS': (8, 'Invalid listing class'),
     'BADUNLOCK': (9, 'Unpaired unlock')
     }
 
