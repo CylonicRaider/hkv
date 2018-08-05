@@ -411,6 +411,7 @@ class Server:
 
     def listen(self):
         self.socket = socket.socket(self.addrfamily)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(self.addr)
         self.socket.listen(5)
 
