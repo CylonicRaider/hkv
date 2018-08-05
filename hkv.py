@@ -5,6 +5,7 @@
 In-memory hierarchical key-value store.
 """
 
+import sys
 import struct
 import threading
 import socket
@@ -517,7 +518,7 @@ class RemoteDataStore:
                 code = self.codec.read_int()
                 raise HKVError.for_code(code)
             elif resp in b'slm-':
-                return self.codec.readf(resp.decode('ascii'))
+                return self.codec.readf('@' + resp.decode('ascii'))
             else:
                 raise HKVError.for_name('NORESP')
 
@@ -569,7 +570,7 @@ def main_listen(params, no_timestamps, loglevel):
     except KeyboardInterrupt:
         pass
 
-def main_command(params, command, *args):
+def main_command(params, nullterm, command, *args):
     def ensure_args(min=1, max=None):
         if len(args) < min:
             raise SystemExit('ERROR: Too few arguments for %s' % command)
@@ -601,11 +602,25 @@ def main_command(params, command, *args):
     except IOError as exc:
         raise SystemExit('ERROR: %s' % exc)
     try:
-        getattr(client, command)(path, *cmdargs)
+        result = getattr(client, command)(path, *cmdargs)
     except HKVError as exc:
         raise SystemExit('ERROR: %s' % exc)
     finally:
         client.close()
+    try:
+        outfile = sys.stdout.buffer
+    except AttributeError:
+        outfile = sys.stdout
+    sep, term = (b'\0', b'\0') if nullterm else (b'=', b'\n')
+    if isinstance(result, bytes):
+        outfile.write(result + term)
+    elif isinstance(result, list):
+        for item in result:
+            outfile.write(item + term)
+    elif isinstance(result, dict):
+        for key, value in result.items():
+            outfile.write(key + sep + value + term)
+    outfile.flush()
 
 def main():
     import argparse
@@ -614,12 +629,17 @@ def main():
                    help='Enter server mode (instead of client mode)')
     p.add_argument('--url', '-u',
                    help='URL to serve on / to connect to')
-    p.add_argument('--datastore', '-d',
+    p.add_argument('--datastore', '-d', metavar='NAME',
                    help='Datastore to use (client mode only)')
-    p.add_argument('--no-timestamps', action='store_true',
-                   help='no timestamps on logs')
-    p.add_argument('--loglevel', default='INFO',
+    p.add_argument('--no-timestamps', '-T', action='store_true',
+                   help='No timestamps on logs')
+    p.add_argument('--loglevel', '-L', default='INFO', metavar='LEVEL',
                    help='Logging level (defaults to INFO)')
+    p.add_argument('--null', '-0', action='store_true',
+                   help='Null-terminate data blocks on output instead of '
+                       'using human-readable characters (note that both keys '
+                       'and values can contain null characters, so that this '
+                       'does not ensure an unambiguous output)')
     p.add_argument('command', nargs='?',
                    help='Command to execute (client mode only)')
     p.add_argument('arg', nargs='*',
@@ -639,6 +659,6 @@ def main():
     if result.listen:
         main_listen(params, result.no_timestamps, result.loglevel)
     else:
-        main_command(params, result.command, *result.arg)
+        main_command(params, result.null, result.command, *result.arg)
 
 if __name__ == '__main__': main()
