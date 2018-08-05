@@ -27,7 +27,7 @@ ERRORS = {
     'BADUNLOCK': (9, 'Unpaired unlock')
     }
 
-ERROR_CODES = {code: name for code, (name, desc) in ERRORS.items()}
+ERROR_CODES = {code: name for name, (code, desc) in ERRORS.items()}
 
 LCLASS_BYTES = 1
 LCLASS_SUBKEYS = 2
@@ -49,7 +49,7 @@ class HKVError(Exception):
             description = ERRORS[ERROR_CODES[code]][1]
         except KeyError:
             description = 'Unknown error?!'
-        return cls(code, ERRORS[ERROR_CODES[code]])
+        return cls(code, description)
 
     def __init__(self, code, message):
         Exception.__init__(self, 'code %s: %s' % (code, message))
@@ -398,12 +398,13 @@ class Server:
                         except HKVError as exc:
                             self.write_error(exc)
                     elif cmd in DataStore._OPERATIONS:
+                        operation = DataStore._OPERATIONS[cmd]
+                        args = self.codec.readf(operation[0])
                         if self.datastore is None:
                             self.write_error('NOSTORE')
+                            self.codec.flush()
                             continue
-                        operation = self.datastore._operations[cmd]
-                        args = self.codec.readf(operation[0])
-                        result = operation[1](*args)
+                        result = self.datastore._operations[cmd][1](*args)
                         self.codec.write_char(operation[2].encode('ascii'))
                         self.codec.writef(operation[2], result)
                     else:
