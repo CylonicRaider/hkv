@@ -281,14 +281,14 @@ class Codec:
             self.write_bytes(v)
 
     def readf(self, format):
-        if format.startswith('*'):
-            single = False
+        if format.startswith('@'):
+            single = True
+            if len(format) != 2:
+                raise TypeError('@ format string must contain exactly '
+                    'one format character')
             format = format[1:]
         else:
-            single = True
-            if len(format) != 1:
-                raise TypeError('* format string must contain exactly one '
-                    'character')
+            single = False
         ret = []
         for t in format:
             ret.append(self._rmap[t]())
@@ -398,10 +398,6 @@ class Server:
                         except HKVError as exc:
                             self.write_error(exc)
                     elif cmd in DataStore._OPERATIONS:
-                        if self.datastore is None:
-                            self.write_error('NOSTORE')
-                            self.codec.flush()
-                            continue
                         try:
                             operation = DataStore._OPERATIONS[cmd]
                             args = self.codec.readf(operation[0])
@@ -587,7 +583,7 @@ def main_command(params, command, *args):
         cmdargs = ()
     elif command == 'put':
         ensure_args(2, 2)
-        cmdarks = (args[1].encode('utf-8'),)
+        cmdargs = (args[1].encode('utf-8'),)
     elif command == 'put_all':
         ensure_args(1)
         values = {}
