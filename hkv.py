@@ -25,8 +25,7 @@ ERRORS = {
     'BADTYPE': (6, 'Invalid value type'),
     'BADPATH': (7, 'Path too short'),
     'BADLCLASS': (8, 'Invalid listing class'),
-    'BADUNLOCK': (9, 'Unpaired unlock')
-    }
+    'BADUNLOCK': (9, 'Unpaired unlock')}
 
 ERROR_CODES = {code: name for name, (code, desc) in ERRORS.items()}
 
