@@ -5,7 +5,7 @@
 In-memory hierarchical key-value store.
 """
 
-import sys
+import sys, os
 import struct
 import threading
 import socket
@@ -447,7 +447,7 @@ class Server:
                             operation = DataStore._OPERATIONS[cmd]
                             args = self.codec.readf(operation[0])
                             if self.datastore is None:
-                                raise HKVError.from_name('NOSTORE')
+                                raise HKVError.for_name('NOSTORE')
                             result = self.datastore._operations[cmd][1](*args)
                         except HKVError as exc:
                             self.write_error(exc)
