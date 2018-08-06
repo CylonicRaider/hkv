@@ -88,7 +88,41 @@ def spawn_thread(func, *args, **kwds):
     thr.start()
     return thr
 
-class DataStore:
+class BaseDataStore:
+    def lock(self):
+        raise NotImplementedError
+
+    def unlock(self):
+        raise NotImplementedError
+
+    def close(self):
+        raise NotImplementedError
+
+    def get(self, path):
+        raise NotImplementedError
+
+    def get_all(self, path):
+        raise NotImplementedError
+
+    def list(self, path, lclass):
+        raise NotImplementedError
+
+    def put(self, path, value):
+        raise NotImplementedError
+
+    def put_all(self, path, values):
+        raise NotImplementedError
+
+    def replace(self, path, values):
+        raise NotImplementedError
+
+    def delete(self, path):
+        raise NotImplementedError
+
+    def delete_all(self, path):
+        raise NotImplementedError
+
+class DataStore(BaseDataStore):
     _OPERATIONS = {
         b'g': ('a', 'get', 's'),
         b'G': ('a', 'get_all', 'm'),
@@ -474,7 +508,7 @@ class Server:
             except IOError:
                 pass
 
-class RemoteDataStore:
+class RemoteDataStore(BaseDataStore):
     def __init__(self, addr, dsname=None, addrfamily=None):
         if addrfamily is None: addrfamily = socket.AF_INET
         self.addr = addr
