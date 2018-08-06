@@ -16,8 +16,8 @@ try:
 except ImportError:
     from urlparse import urlsplit
 
-__all__ = ['LCLASS_VALUE', 'LCLASS_NESTED', 'LCLASS_ANY', 'HKVError',
-           'BaseDataStore', 'DataStore', 'NullDataStore',
+__all__ = ['ERROR_CODES', 'LCLASS_VALUE', 'LCLASS_NESTED', 'LCLASS_ANY',
+           'HKVError', 'BaseDataStore', 'DataStore', 'NullDataStore',
            'ConvertingDataStore', 'DataStoreServer', 'RemoteDataStore']
 
 ERRORS = {
@@ -31,7 +31,7 @@ ERRORS = {
     'BADLCLASS': (8, 'Invalid listing class'),
     'BADUNLOCK': (9, 'Unpaired unlock')}
 
-ERROR_CODES = {code: name for name, (code, desc) in ERRORS.items()}
+ERROR_CODES = {code: (name, desc) for name, (code, desc) in ERRORS.items()}
 
 LCLASS_VALUE = 1
 LCLASS_NESTED = 2
@@ -43,19 +43,41 @@ DEFAULT_ADDRESS = ('localhost', 8311)
 INTEGER = struct.Struct('!I')
 
 class HKVError(Exception):
+    """
+    HKVError(code, message) -> new instance
+
+    General exception for this module.
+
+    code is a numeric error code; message is a human-readable description of
+    the error; the two are combined into the final exception message by the
+    constructor. Users are encouraged to use the factory functions provided on
+    the class instead of calling the constructor directly.
+
+    Instances have a "code" attribute that is the numeric error code; it can
+    be mapped to a tuple of a symbolic name and a human-readable description
+    via the module-level ERROR_CODES mapping.
+    """
+
     @classmethod
     def for_name(cls, name):
+        """
+        Create a HKVError instance from a symbolic error name.
+        """
         return cls(*ERRORS[name])
 
     @classmethod
     def for_code(cls, code):
+        """
+        Create a HKVError instance from a numeric code.
+        """
         try:
-            description = ERRORS[ERROR_CODES[code]][1]
+            description = ERRORS[ERROR_CODES[code][0]][1]
         except KeyError:
             description = 'Unknown error?!'
         return cls(code, description)
 
     def __init__(self, code, message):
+        "Initializer. See class docstring for details."
         Exception.__init__(self, 'code %s: %s' % (code, message))
         self.code = code
 
