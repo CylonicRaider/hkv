@@ -675,14 +675,22 @@ def main():
     if bool(result.listen) == bool(result.command):
         raise SystemExit('ERROR: Must specify either -l or command.')
     try:
-        if result.url is None:
-            params = {'addr': DEFAULT_ADDRESS}
-        else:
+        if result.url is not None:
             params = parse_url(result.url)
+        else:
+            url_string = os.environ.get('HKV_URL')
+            if url_string:
+                params = parse_url(url_string)
+            else:
+                params = {'addr': DEFAULT_ADDRESS}
     except ValueError:
         raise SystemExit('ERROR: Invalid hkv:// URL: %s' % result.url)
     if result.datastore is not None:
         params['dsname'] = result.datastore.encode('utf-8')
+    else:
+        dsname_string = os.environ.get('HKV_DATASTORE')
+        if dsname_string:
+            params['dsname'] = dsname_string.encode('utf-8')
     if result.listen:
         main_listen(params, result.no_timestamps, result.loglevel)
     else:
