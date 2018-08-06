@@ -17,7 +17,8 @@ except ImportError:
     from urlparse import urlsplit
 
 __all__ = ['LCLASS_VALUE', 'LCLASS_NESTED', 'LCLASS_ANY', 'HKVError',
-           'BaseDataStore', 'DataStore', 'DataStoreServer', 'RemoteDataStore']
+           'BaseDataStore', 'DataStore', 'NullDataStore',
+           'ConvertingDataStore', 'DataStoreServer', 'RemoteDataStore']
 
 ERRORS = {
     'UNKNOWN': (1, 'Unknown error'),
@@ -231,6 +232,99 @@ class DataStore(BaseDataStore):
             if not isinstance(record, dict):
                 raise HKVError.for_name('BADTYPE')
             record.clear()
+
+class NullDataStore(BaseDataStore):
+    def lock(self):
+        pass
+
+    def unlock(self):
+        pass
+
+    def close(self):
+        pass
+
+    def get(self, path):
+        raise HKVError.for_name('NOKEY')
+
+    def get_all(self, path):
+        raise HKVError.for_name('NOKEY')
+
+    def list(self, path, lclass):
+        raise HKVError.for_name('NOKEY')
+
+    def put(self, path, value):
+        pass
+
+    def put_all(self, path, values):
+        pass
+
+    def replace(self, path, values):
+        pass
+
+    def delete(self, path):
+        pass
+
+    def delete_all(self, path):
+        pass
+
+class ConvertingDataStore(BaseDataStore):
+    def __init__(self, wrapped):
+        self.wrapped = wrapped
+
+    def import_key(self, key, is_fragment):
+        raise NotImplementedError
+
+    def export_key(self, path):
+        raise NotImplementedError
+
+    def import_value(self, value):
+        raise NotImplementedError
+
+    def export_value(self, data):
+        raise NotImplementedError
+
+    def lock(self):
+        self.wrapped.lock()
+
+    def unlock(self):
+        self.wrapped.unlock()
+
+    def close(self):
+        self.wrapped.close()
+
+    def get(self, path):
+        path = self.import_key(path, False)
+        return self.export_value(self.wrapped.get(path))
+
+    def get_all(self, path):
+        res = self.wrapped.get_all(self.import_key(path, False))
+        ek, ev = self.export_key, self.export_value
+        return {ek(k): ev(v) for k, v in res.items()}
+
+    def list(self, path, lclass):
+        items = self.wrapped.list(self.import_key(path, False))
+        ek = self.export_key
+        return [ek(i, True) for i in items]
+
+    def put(self, path, value):
+        self.wrapped.put(self.import_key(path, False),
+                         self.import_value(value))
+
+    def put_all(self, path, values):
+        ik, iv = self.import_key, self.import_value
+        ivalues = {ik(k, True): iv(v) for k, v in values.items()}
+        self.wrapped.put_all(self, self.import_key(path, False), ivalues)
+
+    def replace(self, path, values):
+        ik, iv = self.import_key, self.import_value
+        ivalues = {ik(k, True): iv(v) for k, v in values.items()}
+        self.wrapped.replace(self, self.import_key(path, False), ivalues)
+
+    def delete(self, path):
+        self.wrapped.delete(self.import_key(path, False))
+
+    def delete_all(self, path):
+        self.wrapped.delete_all(self.import_key(path, False))
 
 class Codec:
     def __init__(self, rfile, wfile):
