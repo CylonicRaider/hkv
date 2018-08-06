@@ -16,6 +16,9 @@ try:
 except ImportError:
     from urlparse import urlsplit
 
+__all__ = ['LCLASS_VALUE', 'LCLASS_NESTED', 'LCLASS_ANY', 'HKVError',
+           'BaseDataStore', 'DataStore', 'DataStoreServer', 'RemoteDataStore']
+
 ERRORS = {
     'UNKNOWN': (1, 'Unknown error'),
     'NOCMD': (2, 'No such command'),
@@ -351,7 +354,7 @@ class Codec:
         for t, a in zip(format, args):
             self._wmap[t](a)
 
-class Server:
+class DataStoreServer:
     class ClientHandler:
         def __init__(self, parent, id, conn, addr):
             self.parent = parent
@@ -609,7 +612,7 @@ def main_listen(params, no_timestamps, loglevel):
     else:
         logging.basicConfig(format='[%(asctime)s %(name)s %(levelname)s] '
             '%(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=loglevel)
-    server = Server(**params)
+    server = DataStoreServer(**params)
     server.listen()
     try:
         server.main()
