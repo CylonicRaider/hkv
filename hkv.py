@@ -3,6 +3,18 @@
 
 """
 In-memory hierarchical key-value store.
+
+A DataStore holds pairs of keys and values (with unique keys), where each
+value can be either a "scalar" or a nested collection of key-value pairs with
+the same semantics. Each value is reachable through a path, which corresponds
+to a sequence of keys; if the path points to a key-value collection, the keys
+of the latter are said to be "nested" below the path.
+The concrete types of keys and values are not defined; the classes provided in
+module use byte strings as keys and scalar values, Python sequences (e.g.
+tuples) of byte strings as paths, and Python dictionaries as key-value
+collections. The ConvertingDataStore class allows using arbitrary types for
+keys, scalar values, and paths (key-value collections remain Python
+dictionaries).
 """
 
 import sys, os
@@ -16,9 +28,10 @@ try:
 except ImportError:
     from urlparse import urlsplit
 
-__all__ = ['ERROR_CODES', 'LCLASS_VALUE', 'LCLASS_NESTED', 'LCLASS_ANY',
-           'HKVError', 'BaseDataStore', 'DataStore', 'NullDataStore',
-           'ConvertingDataStore', 'DataStoreServer', 'RemoteDataStore']
+__all__ = ['ERRORS', 'ERROR_CODES', 'LCLASS_SCALAR', 'LCLASS_NESTED',
+           'LCLASS_ANY', 'HKVError', 'BaseDataStore', 'DataStore',
+           'NullDataStore', 'ConvertingDataStore', 'DataStoreServer',
+           'RemoteDataStore']
 
 # Mapping from error names to codes and descriptions.
 ERRORS = {
@@ -37,7 +50,8 @@ ERRORS = {
 ERROR_CODES = {code: (name, desc) for name, (code, desc) in ERRORS.items()}
 
 # Possible lclass argments to DataStore.list().
-LCLASS_VALUE  = 1 # List values contained in this key.
+LCLASS_NONE   = 0 # List nothing.
+LCLASS_SCALAR = 1 # List values contained in this key.
 LCLASS_NESTED = 2 # List nested keys.
 LCLASS_ANY    = 3 # List both contained values and nested keys.
 
@@ -88,6 +102,10 @@ class HKVError(Exception):
         self.code = code
 
 def parse_url(url):
+    """
+    Utility function converting a URL into keyword arguments for
+    DataStoreServer or RemoteDataStore constructor keyword arguments.
+    """
     parts = urlsplit(url)
     if parts.scheme != 'hkv':
         raise ValueError('Invalid hkv:// URL')
@@ -114,43 +132,144 @@ def parse_url(url):
     return ret
 
 def spawn_thread(func, *args, **kwds):
+    """
+    Utility function for creating and starting a daemonic thread.
+    """
     thr = threading.Thread(target=func, args=args, kwargs=kwds)
     thr.setDaemon(True)
     thr.start()
     return thr
 
 class BaseDataStore:
+    """
+    An abstract class defining the operations DataStore et al. support.
+
+    See the module docstring for the terms used.
+
+    The operations may raise HKVError instances whose code corresponds to
+    some of the symbolic names defined in the ERRORS mapping; an error
+    corresponding to symbolic name X is abbreviatedly referred to as an "X
+    error" henceforth.
+
+    Most operations that take a path as an argument require that all of it
+    should exist, unless otherwise noted; if that is not the case, they raise
+    a NOKEY error.
+    Any operation that takes a path raises a BADNEST error if any prefix of
+    the path refers to scalar value.
+    Unless otherwise noted, paths must be nonempty; this implies that it is
+    impossible to perform most operations on the datastore itself.
+    These errors are not explicitly noted below.
+    """
+
     def lock(self):
+        """
+        Acquire an exclusive lock on the datastore.
+
+        The lock is reentrant; i.e., lock() may be called multiple times
+        without causing a deadlock. If another user of the datastore already
+        holds a lock, this blocks until the lock is fully released.
+        """
         raise NotImplementedError
 
     def unlock(self):
+        """
+        Release a level of locking on the datastore.
+
+        If the caller does not hold the lock of the datastore, thus causes
+        a BADUNLOCK error.
+        """
         raise NotImplementedError
 
     def close(self):
+        """
+        Dispose of any low-level resources associated with this datastore.
+
+        The datastore object is unusable after this (note, however, that it is
+        not necessarily identical with the underlying storage: a remote
+        datastore will remain intact); further attempts to access it may
+        result in unspecified errors.
+        """
         raise NotImplementedError
 
     def get(self, path):
+        """
+        Retrieve the scalar value at the given path.
+
+        If the path does not refer to a scalar value, this results in a
+        BADTYPE error.
+        """
         raise NotImplementedError
 
     def get_all(self, path):
+        """
+        Retrieve all keys nested immediately under path and their values.
+
+        If the path has a scalar value, this results in a BADTYPE error. path
+        may be empty. Note that an empty mapping may be a valid result.
+        """
         raise NotImplementedError
 
     def list(self, path, lclass):
+        """
+        Enumerate all keys nested below path, filtering by the given listing
+        class.
+
+        path may be the empty path. lclass is a bitmask of LCLASS_* constants;
+        if the LCLASS_SCALAR bit is set, keys corresponding to scalar values
+        are included in the result; if the LCLASS_NESTED bit is set, nested
+        keys are included.
+
+        Note that an empty sequence may be a valid result.
+        """
         raise NotImplementedError
 
     def put(self, path, value):
+        """
+        Store the given value at the given path.
+
+        value must be a scalar value.
+
+        If path does not exist, it is created (recursively). Otherwise, the
+        value replaces whatever has been at the path previously (which may be
+        a nested subtree of key-value pairs).
+        """
         raise NotImplementedError
 
     def put_all(self, path, values):
+        """
+        Store all key-value pairs from values below path.
+
+        path may be the empty path. The values in values must be scalars.
+
+        If path does not exist, it is created (recursively). If it exists and
+        refers to a scalar value, a BADTYPE error is raised.
+        """
         raise NotImplementedError
 
     def replace(self, path, values):
+        """
+        Store the given key-value pairs as descendants of path.
+
+        This is functionally equivalent to put(), but takes a different
+        argument type. The values in values must be scalars.
+        """
         raise NotImplementedError
 
     def delete(self, path):
+        """
+        Delete the value residing at path, regardless of its type.
+
+        If path does already not exist, this produces the appropriate error.
+        """
         raise NotImplementedError
 
     def delete_all(self, path):
+        """
+        Delete all descendants of the value residing at path.
+
+        If path does not refer to a nested key-value collection, this raises
+        a BADTYPE error.
+        """
         raise NotImplementedError
 
 class DataStore(BaseDataStore):
@@ -224,7 +343,7 @@ class DataStore(BaseDataStore):
             record = self._follow_path(path)
             if not isinstance(record, dict):
                 raise HKVError.for_name('BADTYPE')
-            elif lclass == LCLASS_VALUE:
+            elif lclass == LCLASS_SCALAR:
                 return [k for k, v in record.items()
                         if not isinstance(v, dict)]
             elif lclass == LCLASS_NESTED:
@@ -761,8 +880,8 @@ def main_command(params, nullterm, command, *args):
         ensure_args(2, 2)
         flags = 0
         for char in args[1]:
-            if char == 'v':
-                flags |= LCLASS_VALUE
+            if char == 's':
+                flags |= LCLASS_SCALAR
             elif char == 'n':
                 flags |= LCLASS_NESTED
             elif char == 'a':
