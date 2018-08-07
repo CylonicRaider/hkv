@@ -160,7 +160,33 @@ class BaseDataStore:
     impossible to perform most operations on the datastore itself.
     These errors are not explicitly noted below. Some implementations may
     raise less errors than noted here.
+
+    DataStore objects support the context management protocol; when used in a
+    with statement, the DataStore is locked before entering the code block and
+    unlocked after exiting the code block.
     """
+
+    def __enter__(self):
+        """
+        Context manager entry.
+
+        See the class docstring for details.
+
+        The default implementation calls the lock() method and returns the
+        DataStore object it is called upon.
+        """
+        self.lock()
+        return self
+
+    def __exit__(self, *args):
+        """
+        Context manager exit.
+
+        See the class docstring for details.
+
+        The default implementation calls the unlock() method.
+        """
+        self.unlock()
 
     def lock(self):
         """
@@ -859,18 +885,6 @@ class RemoteDataStore(BaseDataStore):
         self.codec = None
         self._lock = threading.RLock()
 
-    def __enter__(self):
-        "Context manager entry; see the class docstring for details."
-        self._lock.__enter__()
-        self.lock()
-
-    def __exit__(self, *args):
-        "Context manager exit; see the class docstring for details."
-        try:
-            self.unlock()
-        finally:
-            self._lock.__exit__(*args)
-
     def connect(self):
         """
         Establish a connection to the datastore server.
@@ -939,13 +953,37 @@ class RemoteDataStore(BaseDataStore):
         operation = DataStore._OPERATIONS[opname]
         return self._run_command(opname, operation[0], *args)
 
+    def lock_remote(self):
+        """
+        Lock the remote datastore.
+
+        Differently to lock(), this only performs the corresponding remote API
+        command and does not acquire this object's local lock in addition;
+        hence, multiple threads can use the object concurrently after this
+        has been called.
+        """
+        return self._run_command(b'b', '')
+
+    def unlock_remote(self):
+        """
+        Unlock the remote datastore.
+
+        See the nodes to lock_remote() for details.
+        """
+        return self._run_command(b'f', '')
+
     def lock(self):
         "Lock this DataStore; see BaseDataStore for details."
-        return self._run_command(b'b', '')
+        self._lock.acquire()
+        self.lock()
 
     def unlock(self):
         "Unlock this DataStore; see BaseDataStore for details."
-        return self._run_command(b'f', '')
+        try:
+            self.unlock_remote()
+        finally:
+            self._lock.release()
+
 
     def get(self, path):
         "Retrieve a scalar at path; see BaseDataStore for details."
