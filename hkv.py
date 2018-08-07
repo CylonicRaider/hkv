@@ -20,6 +20,7 @@ __all__ = ['ERROR_CODES', 'LCLASS_VALUE', 'LCLASS_NESTED', 'LCLASS_ANY',
            'HKVError', 'BaseDataStore', 'DataStore', 'NullDataStore',
            'ConvertingDataStore', 'DataStoreServer', 'RemoteDataStore']
 
+# Mapping from error names to codes and descriptions.
 ERRORS = {
     'UNKNOWN': (1, 'Unknown error'),
     'NOCMD': (2, 'No such command'),
@@ -31,15 +32,19 @@ ERRORS = {
     'BADLCLASS': (8, 'Invalid listing class'),
     'BADUNLOCK': (9, 'Unpaired unlock')}
 
+# Mapping from error codes to names and descriptions.
 ERROR_CODES = {code: (name, desc) for name, (code, desc) in ERRORS.items()}
 
-LCLASS_VALUE = 1
-LCLASS_NESTED = 2
-LCLASS_ANY = 3
+# Possible lclass argments to DataStore.list().
+LCLASS_VALUE  = 1 # List values contained in this key.
+LCLASS_NESTED = 2 # List nested keys.
+LCLASS_ANY    = 3 # List both contained values and nested keys.
 
+# The default address on which to listen on / connect to.
 # 8311 is delta-encoded from the alphabet indices of H, K, and V.
 DEFAULT_ADDRESS = ('localhost', 8311)
 
+# Helper object for Codec.
 INTEGER = struct.Struct('!I')
 
 class HKVError(Exception):
