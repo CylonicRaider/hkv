@@ -27,10 +27,11 @@ ERRORS = {
     'NORESP': (3, 'Unknown response'),
     'NOSTORE': (4, 'No datastore opened'),
     'NOKEY': (5, 'No such key'),
-    'BADTYPE': (6, 'Invalid value type'),
-    'BADPATH': (7, 'Path too short'),
-    'BADLCLASS': (8, 'Invalid listing class'),
-    'BADUNLOCK': (9, 'Unpaired unlock')}
+    'BADNEST': (6, 'Prefix of path corresponds to scalar'),
+    'BADTYPE': (7, 'Invalid value type'),
+    'BADPATH': (8, 'Path too short'),
+    'BADLCLASS': (9, 'Invalid listing class'),
+    'BADUNLOCK': (10, 'Unpaired unlock')}
 
 # Mapping from error codes to names and descriptions.
 ERROR_CODES = {code: (name, desc) for name, (code, desc) in ERRORS.items()}
@@ -172,6 +173,8 @@ class DataStore(BaseDataStore):
     def _follow_path(self, path, create=False):
         cur = self.data
         for ent in path:
+            if not isinstance(cur, dict):
+                raise HKVError.for_name('BADNEST')
             try:
                 cur = cur[ent]
             except KeyError:
@@ -186,7 +189,9 @@ class DataStore(BaseDataStore):
     def _split_follow_path(self, path, create=False):
         if not path: raise HKVError.for_name('BADPATH')
         prefix, last = path[:-1], path[-1]
-        return self._follow_path(prefix, create), last
+        res = self._follow_path(prefix, create)
+        if not isinstance(res, dict): raise HKVError.for_name('BADNEST')
+        return res, last
 
     def lock(self):
         self._lock.acquire()
