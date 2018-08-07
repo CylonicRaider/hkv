@@ -453,16 +453,16 @@ class ConvertingDataStore(BaseDataStore):
     def __init__(self, wrapped):
         self.wrapped = wrapped
 
-    def import_key(self, key, is_fragment):
+    def import_key(self, key, fragment):
         raise NotImplementedError
 
-    def export_key(self, path):
+    def export_key(self, key, fragment):
         raise NotImplementedError
 
     def import_value(self, value):
         raise NotImplementedError
 
-    def export_value(self, data):
+    def export_value(self, value):
         raise NotImplementedError
 
     def lock(self):
@@ -481,7 +481,7 @@ class ConvertingDataStore(BaseDataStore):
     def get_all(self, path):
         res = self.wrapped.get_all(self.import_key(path, False))
         ek, ev = self.export_key, self.export_value
-        return {ek(k): ev(v) for k, v in res.items()}
+        return {ek(k, True): ev(v) for k, v in res.items()}
 
     def list(self, path, lclass):
         items = self.wrapped.list(self.import_key(path, False))
