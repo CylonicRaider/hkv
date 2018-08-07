@@ -450,62 +450,113 @@ class NullDataStore(BaseDataStore):
         pass
 
 class ConvertingDataStore(BaseDataStore):
+    """
+    ConvertingDataStore(wrapped) -> new instance
+
+    A wrapper around another DataStore that converts keys and values on the
+    fly.
+
+    An "internal" format for keys and values is used when speaking with the
+    wrapped instance, while an "external" format is accepted and returned by
+    the public methods. The import_*() method convert from the external to the
+    internal format; the export_*() methods undo this conversion; these need
+    to be implemented in a subclass in order to use this.
+
+    The value conversion methods are not passed the key the value corresponds
+    to (if any); in particular, the internal format must be self-describing
+    enough to accommodate that. Where a key-value mapping is passed or
+    returned, the individual keys and values are converted rather than the
+    whole mapping.
+    """
+
     def __init__(self, wrapped):
+        "Instance initializer; see class docstring for details."
         self.wrapped = wrapped
 
     def import_key(self, key, fragment):
+        """
+        Convert the given key from the external to the internal format.
+
+        If fragment is true, the key is a key proper; otherwise, it actually
+        is a path.
+        """
         raise NotImplementedError
 
     def export_key(self, key, fragment):
+        """
+        Convert the given key from the internal to the external format.
+
+        If fragment is true, the key is a key proper; otherwise, it actually
+        is a path.
+        """
         raise NotImplementedError
 
     def import_value(self, value):
+        """
+        Convert the given scalar value from the internal to the external
+        format.
+        """
         raise NotImplementedError
 
     def export_value(self, value):
+        """
+        Convert the given scalar value from the external to the internal
+        format.
+        """
         raise NotImplementedError
 
     def lock(self):
+        "Lock this DataStore; see BaseDataStore for details."
         self.wrapped.lock()
 
     def unlock(self):
+        "Unlock this DataStore; see BaseDataStore for details."
         self.wrapped.unlock()
 
     def close(self):
+        "Dispose of this DataStore; see BaseDataStore for details."
         self.wrapped.close()
 
     def get(self, path):
+        "Retrieve a scalar at path; see BaseDataStore for details."
         path = self.import_key(path, False)
         return self.export_value(self.wrapped.get(path))
 
     def get_all(self, path):
+        "Retrieve key-value pairs below path; see BaseDataStore for details."
         res = self.wrapped.get_all(self.import_key(path, False))
         ek, ev = self.export_key, self.export_value
         return {ek(k, True): ev(v) for k, v in res.items()}
 
     def list(self, path, lclass):
+        "List some keys below path; see BaseDataStore for details."
         items = self.wrapped.list(self.import_key(path, False))
         ek = self.export_key
         return [ek(i, True) for i in items]
 
     def put(self, path, value):
+        "Store value at path; see BaseDataStore for details."
         self.wrapped.put(self.import_key(path, False),
                          self.import_value(value))
 
     def put_all(self, path, values):
+        "Merge pairs from values below path; see BaseDataStore for details."
         ik, iv = self.import_key, self.import_value
         ivalues = {ik(k, True): iv(v) for k, v in values.items()}
         self.wrapped.put_all(self, self.import_key(path, False), ivalues)
 
     def replace(self, path, values):
+        "Store values at path; see BaseDataStore for details."
         ik, iv = self.import_key, self.import_value
         ivalues = {ik(k, True): iv(v) for k, v in values.items()}
         self.wrapped.replace(self, self.import_key(path, False), ivalues)
 
     def delete(self, path):
+        "Delete the value at path; see BaseDataStore for details."
         self.wrapped.delete(self.import_key(path, False))
 
     def delete_all(self, path):
+        "Delete everything below path; see BaseDataStore for details."
         self.wrapped.delete_all(self.import_key(path, False))
 
 class Codec:
@@ -787,7 +838,19 @@ class DataStoreServer:
                 pass
 
 class RemoteDataStore(BaseDataStore):
+    """
+    RemoteDataStore(addr, dsname=None, addrfamily=None) -> new instance
+
+    A proxy for a remote DataStore.
+
+    addr is the socket address to connect to; dsname is the name of the remote
+    datastore to use (if omitted, a datastore must be explicitly opened using
+    open() before use); addrfamily is the address family for the socket to be
+    created (defaulting to socket.AF_INET).
+    """
+
     def __init__(self, addr, dsname=None, addrfamily=None):
+        "Instance initializer; see the class docstring for details."
         if addrfamily is None: addrfamily = socket.AF_INET
         self.addr = addr
         self.dsname = dsname
@@ -797,16 +860,24 @@ class RemoteDataStore(BaseDataStore):
         self._lock = threading.RLock()
 
     def __enter__(self):
+        "Context manager entry; see the class docstring for details."
         self._lock.__enter__()
         self.lock()
 
     def __exit__(self, *args):
+        "Context manager exit; see the class docstring for details."
         try:
             self.unlock()
         finally:
             self._lock.__exit__(*args)
 
     def connect(self):
+        """
+        Establish a connection to the datastore server.
+
+        If the dsname attribute is not None, an open() call is automatically
+        performed after successfully connecting.
+        """
         self.socket = socket.socket(self.addrfamily)
         self.socket.connect(self.addr)
         self.codec = Codec(self.socket.makefile('rb'),
@@ -814,9 +885,15 @@ class RemoteDataStore(BaseDataStore):
         if self.dsname is not None: self.open(self.dsname)
 
     def open(self, dsname):
+        """
+        Open the named remote datastore.
+
+        Any previously opened datastore is automatically detached from.
+        """
         self._run_command(b'o', 's', dsname)
 
     def close(self):
+        "Dispose of this DataStore; see BaseDataStore for details."
         try:
             self.socket.shutdown(socket.SHUT_RDWR)
         except Exception:
@@ -831,6 +908,19 @@ class RemoteDataStore(BaseDataStore):
             pass
 
     def _run_command(self, cmd, format, *args):
+        """
+        Helper method for executing a remote API command.
+
+        cmd is the byte denoting the command to execute; format and args
+        define values to send as arguments (the receiving side must read
+        the arguments in a compatible manner; otherwise, both sides will lose
+        synchronization and things will fall apart).
+
+        After submitting the command, a response is received and decoded
+        according to the data type indicated along with the response; if the
+        response is an error or invalid, an HKVError exception is raised;
+        otherwise, the value responded with is returned.
+        """
         with self._lock:
             self.codec.write_char(cmd)
             self.codec.writef(format, *args)
@@ -845,37 +935,48 @@ class RemoteDataStore(BaseDataStore):
                 raise HKVError.for_name('NORESP')
 
     def _run_operation(self, opname, *args):
+        "Helper method performing a remote DataStore operation."
         operation = DataStore._OPERATIONS[opname]
         return self._run_command(opname, operation[0], *args)
 
     def lock(self):
+        "Lock this DataStore; see BaseDataStore for details."
         return self._run_command(b'b', '')
 
     def unlock(self):
+        "Unlock this DataStore; see BaseDataStore for details."
         return self._run_command(b'f', '')
 
     def get(self, path):
+        "Retrieve a scalar at path; see BaseDataStore for details."
         return self._run_operation(b'g', path)
 
     def get_all(self, path):
+        "Retrieve key-value pairs below path; see BaseDataStore for details."
         return self._run_operation(b'G', path)
 
     def list(self, path, lclass):
+        "List some keys below path; see BaseDataStore for details."
         return self._run_operation(b'l', path, lclass)
 
     def put(self, path, value):
+        "Store value at path; see BaseDataStore for details."
         return self._run_operation(b'p', path, value)
 
     def put_all(self, path, values):
+        "Merge pairs from values below path; see BaseDataStore for details."
         return self._run_operation(b'P', path, values)
 
     def replace(self, path, values):
+        "Store values at path; see BaseDataStore for details."
         return self._run_operation(b'r', path, values)
 
     def delete(self, path):
+        "Delete the value at path; see BaseDataStore for details."
         return self._run_operation(b'd', path)
 
     def delete_all(self, path):
+        "Delete everything below path; see BaseDataStore for details."
         return self._run_operation(b'D', path)
 
 def main_listen(params, no_timestamps, loglevel):
