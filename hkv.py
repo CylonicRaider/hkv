@@ -158,7 +158,8 @@ class BaseDataStore:
     the path refers to scalar value.
     Unless otherwise noted, paths must be nonempty; this implies that it is
     impossible to perform most operations on the datastore itself.
-    These errors are not explicitly noted below.
+    These errors are not explicitly noted below. Some implementations may
+    raise less errors than noted here.
     """
 
     def lock(self):
@@ -214,10 +215,11 @@ class BaseDataStore:
         Enumerate all keys nested below path, filtering by the given listing
         class.
 
-        path may be the empty path. lclass is a bitmask of LCLASS_* constants;
-        if the LCLASS_SCALAR bit is set, keys corresponding to scalar values
-        are included in the result; if the LCLASS_NESTED bit is set, nested
-        keys are included.
+        path may be the empty path; if it refers to a scalar, a BADTYPE error
+        is raised. lclass is a bitmask of LCLASS_* constants; if the
+        LCLASS_SCALAR bit is set, keys corresponding to scalar values are
+        included in the result; if the LCLASS_NESTED bit is set, nested keys
+        are included.
 
         Note that an empty sequence may be a valid result.
         """
@@ -273,6 +275,12 @@ class BaseDataStore:
         raise NotImplementedError
 
 class DataStore(BaseDataStore):
+    """
+    DataStore() -> new instance
+
+    This is an in-memory implementation of the DataStore interface.
+    """
+
     _OPERATIONS = {
         b'g': ('a', 'get', 's'),
         b'G': ('a', 'get_all', 'm'),
@@ -284,12 +292,14 @@ class DataStore(BaseDataStore):
         b'D': ('a', 'delete_all', '-')}
 
     def __init__(self):
+        "Initializer; see class docstring for details."
         self.data = {}
         self._lock = threading.RLock()
         self._operations = {k: (i, getattr(self, m), o)
                             for k, (i, m, o) in self._OPERATIONS.items()}
 
     def _follow_path(self, path, create=False):
+        "Internal helper method."
         cur = self.data
         for ent in path:
             if not isinstance(cur, dict):
@@ -306,6 +316,7 @@ class DataStore(BaseDataStore):
         return cur
 
     def _split_follow_path(self, path, create=False):
+        "Internal helper method."
         if not path: raise HKVError.for_name('BADPATH')
         prefix, last = path[:-1], path[-1]
         res = self._follow_path(prefix, create)
@@ -313,24 +324,29 @@ class DataStore(BaseDataStore):
         return res, last
 
     def lock(self):
+        "Lock this DataStore; see BaseDataStore for details."
         self._lock.acquire()
 
     def unlock(self):
+        "Unlock this DataStore; see BaseDataStore for details."
         try:
             self._lock.release()
         except RuntimeError:
             raise HKVError.for_name('BADUNLOCK')
 
     def close(self):
+        "Dispose of this DataStore; see BaseDataStore for details."
         self.data = None
 
     def get(self, path):
+        "Retrieve a scalar at path; see BaseDataStore for details."
         with self._lock:
             ret = self._follow_path(path)
             if isinstance(ret, dict): raise HKVError.for_name('BADTYPE')
             return ret
 
     def get_all(self, path):
+        "Retrieve key-value pairs below path; see BaseDataStore for details."
         with self._lock:
             record = self._follow_path(path)
             if not isinstance(record, dict):
@@ -339,6 +355,7 @@ class DataStore(BaseDataStore):
                     if not isinstance(v, dict)}
 
     def list(self, path, lclass):
+        "List some keys below path; see BaseDataStore for details."
         with self._lock:
             record = self._follow_path(path)
             if not isinstance(record, dict):
@@ -354,11 +371,13 @@ class DataStore(BaseDataStore):
                 raise HKVError.for_name('BADLCLASS')
 
     def put(self, path, value):
+        "Store value at path; see BaseDataStore for details."
         with self._lock:
             record, key = self._split_follow_path(path, True)
             record[key] = value
 
     def put_all(self, path, values):
+        "Merge pairs from values below path; see BaseDataStore for details."
         with self._lock:
             record = self._follow_path(path, True)
             if not isinstance(record, dict):
@@ -367,9 +386,11 @@ class DataStore(BaseDataStore):
                 record[k] = v
 
     def replace(self, path, values):
+        "Store values at path; see BaseDataStore for details."
         self.put(path, values)
 
     def delete(self, path):
+        "Delete the value at path; see BaseDataStore for details."
         with self._lock:
             record, key = self._split_follow_path(path)
             try:
@@ -378,6 +399,7 @@ class DataStore(BaseDataStore):
                 raise HKVError.for_name('NOKEY')
 
     def delete_all(self, path):
+        "Delete everything below path; see BaseDataStore for details."
         with self._lock:
             record = self._follow_path(path)
             if not isinstance(record, dict):
@@ -385,6 +407,15 @@ class DataStore(BaseDataStore):
             record.clear()
 
 class NullDataStore(BaseDataStore):
+    """
+    NullDataStore() -> new instance
+
+    A DataStore implementation that does not retain any data.
+
+    All reading requests (get(), get_all(), list()) raise a NOKEY error, while
+    all other operations do nothing.
+    """
+
     def lock(self):
         pass
 
