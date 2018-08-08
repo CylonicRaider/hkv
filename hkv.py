@@ -802,8 +802,35 @@ class Codec:
             self._wmap[t](a)
 
 class DataStoreServer:
+    """
+    DataStoreServer(addr, addrfamily=None) -> new instance
+
+    The server part of remote datastores.
+
+    addr is the socket address to bind to; addrfamily is the address family
+    for it (defaulting to socket.AF_INET).
+
+    In order to use a server, create an instance and call its main() method
+    (potentially in a background thread).
+    """
+
     class ClientHandler:
+        """
+        ClientHandler(parent, id, conn, addr) -> new instance
+
+        A class for serving individual connections to a datastore server.
+
+        parent is the DataStoreServer this instance belongs to; id is a
+        numerical ID of this client handler (for disambiguation purposes);
+        conn is the socket representing the connection to the client; address
+        is the address of the client.
+
+        Normally, users do not need to instantiate this class directly;
+        DataStoreServer does that.
+        """
+
         def __init__(self, parent, id, conn, addr):
+            "Instance initializer; see class docstring for details."
             self.parent = parent
             self.id = id
             self.conn = conn
@@ -815,9 +842,20 @@ class DataStoreServer:
             self.logger = logging.getLogger('client/%s' % self.id)
 
         def init(self):
+            """
+            Perform initialization tasks for this ClientHandler.
+
+            This is invoked synchronously in the context of the server's main
+            loop and should exit quickly.
+            """
             self.logger.info('Connection from %s', self.addr)
 
         def close(self):
+            """
+            Clean up this client handler and all associated resources.
+
+            The underlying socket is shut down and closed.
+            """
             self.logger.info('Closing')
             try:
                 self.conn.shutdown(socket.SHUT_RDWR)
@@ -833,11 +871,23 @@ class DataStoreServer:
                 pass
 
         def lock(self):
+            """
+            Utility method for locking the underlying datastore.
+
+            Do not call this is no datastore has been opened.
+            """
             if self.locked == 0:
                 self.datastore.lock()
             self.locked += 1
 
         def unlock(self, full=False):
+            """
+            Utility method for unlocking the underlying datastore.
+
+            If full is true, any nesting level of locking is undone and the
+            datastore is actually unlocked (this is useful when closing a
+            datastore).
+            """
             if full:
                 if self.locked > 0 and self.datastore:
                     self.datastore.unlock()
@@ -851,6 +901,13 @@ class DataStoreServer:
                 self.locked -= 1
 
         def write_error(self, exc):
+            """
+            Convenience method for writing an error message to the client.
+
+            exc is either an error name, or a HKVError instance, or anything
+            else. The corresponding error code is sent in the first two cases,
+            and a generic error in the latter case.
+            """
             if isinstance(exc, str):
                 code = ERRORS[exc][0]
             elif isinstance(exc, HKVError):
@@ -860,6 +917,9 @@ class DataStoreServer:
             self.codec.writef('ci', b'e', code)
 
         def main(self):
+            """
+            Run the main loop of this client handler.
+            """
             try:
                 while 1:
                     try:
@@ -913,6 +973,7 @@ class DataStoreServer:
                 self.close()
 
     def __init__(self, addr, addrfamily=None):
+        "Instance initializer; see the class docstring for details."
         if addrfamily is None: addrfamily = socket.AF_INET
         self.addr = addr
         self.addrfamily = addrfamily
@@ -922,6 +983,11 @@ class DataStoreServer:
         self.logger = logging.getLogger('server')
 
     def listen(self):
+        """
+        Actually create the socket of the server and start listening on it.
+
+        Called by main().
+        """
         self.logger.info('Listening on %s', self.addr)
         self.socket = socket.socket(self.addrfamily)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -929,6 +995,11 @@ class DataStoreServer:
         self.socket.listen(5)
 
     def accept(self):
+        """
+        Accept a single connection and spawn a handler thread for it.
+
+        Called by main() repeatedly.
+        """
         conn, addr = self.socket.accept()
         handler = self.ClientHandler(self, self._next_id, conn, addr)
         self._next_id += 1
@@ -936,6 +1007,12 @@ class DataStoreServer:
         spawn_thread(handler.main)
 
     def close(self):
+        """
+        Clean up the server's socket.
+
+        Client handler threads continue working in the background. Called by
+        main() after the main loop is interrupted.
+        """
         self.logger.info('Closing')
         try:
             self.socket.close()
@@ -943,6 +1020,11 @@ class DataStoreServer:
             pass
 
     def get_datastore(self, name):
+        """
+        Retrieve a datastore for the given name or return a new one.
+
+        Used by ClientHandler.
+        """
         try:
             return self.datastores[name]
         except KeyError:
@@ -951,6 +1033,9 @@ class DataStoreServer:
             return ret
 
     def main(self):
+        """
+        Run the main loop of the server.
+        """
         self.listen()
         try:
             while 1:
