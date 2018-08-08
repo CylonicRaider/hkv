@@ -967,6 +967,10 @@ class RemoteDataStore(BaseDataStore):
     datastore to use (if omitted, a datastore must be explicitly opened using
     open() before use); addrfamily is the address family for the socket to be
     created (defaulting to socket.AF_INET).
+
+    Prior to use, the connect() method has to be called; if no datastore name
+    is configured when it is called, open() has to be called in addition after
+    it but before use.
     """
 
     def __init__(self, addr, dsname=None, addrfamily=None):
