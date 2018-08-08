@@ -951,11 +951,15 @@ class DataStoreServer:
             return ret
 
     def main(self):
-        while 1:
-            try:
-                self.accept()
-            except IOError:
-                pass
+        self.listen()
+        try:
+            while 1:
+                try:
+                    self.accept()
+                except IOError:
+                    pass
+        finally:
+            self.close()
 
 class RemoteDataStore(BaseDataStore):
     """
