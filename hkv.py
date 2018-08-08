@@ -1205,6 +1205,11 @@ class RemoteDataStore(BaseDataStore):
         return self._run_operation(b'D', path)
 
 def main_listen(params, no_timestamps, loglevel):
+    """
+    Helper function for running a server from the command line.
+
+    Invoked by main().
+    """
     if 'dsname' in params:
         raise SystemExit('ERROR: Must not specify datastore name when '
             'listening')
@@ -1222,7 +1227,13 @@ def main_listen(params, no_timestamps, loglevel):
         pass
 
 def main_command(params, nullterm, command, *args):
+    """
+    Helper function for running a single-command client from the command line.
+
+    Invoked by main().
+    """
     def ensure_args(min=1, max=None):
+        "Helper function for checking the argument count of a command,"
         if len(args) < min:
             raise SystemExit('ERROR: Too few arguments for %s' % command)
         if max is not None and len(args) > max:
@@ -1288,6 +1299,9 @@ def main_command(params, nullterm, command, *args):
     outfile.flush()
 
 def main():
+    """
+    Main function for execution as a script.
+    """
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument('--listen', '-l', action='store_true',
