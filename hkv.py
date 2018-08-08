@@ -586,7 +586,43 @@ class ConvertingDataStore(BaseDataStore):
         self.wrapped.delete_all(self.import_key(path, False))
 
 class Codec:
+    """
+    Codec(rfile, wfile) -> new instance
+
+    A utility class for serializing (and deserializing) data for the remote
+    API.
+
+    The read_*() methods read bytes from rfile (which must be a binary stream
+    open for reading) and convert them to the corresponding type; the
+    write_*() methods convert the value passed to them into a byte stream and
+    write it to wfile (which must be a binary stream open for writing). If
+    wfile is buffering internally, use the flush() method to flush it. close()
+    closes both rfile and wfile.
+
+    readf() and writef() methods read or write values according to format
+    strings passed to them. Each format string consists of an optional leading
+    modifier, which is followed by a sequence of format units. Whitespace etc.
+    is not allowed. The following modifiers and format units are defined:
+    "@": (modifier; readf() only) Return a single value rather than a list of
+         values. The remainder of the format string must consist of exactly
+         one character; the value corresponding to it is read and returned.
+    "*": (modifier; writef() only) Instead of multiple positional arguments
+         following the format string, accept only one positional argument,
+         which then must be a sequence from where the values to be encoded
+         are taken.
+    "-": A value of None; nothing is actually read/written from/to the
+         underlying files.
+    "c": A single byte.
+    "i": A Python integer; mapped to an unsigned 32-bit integer.
+    "s": A single byte string (at most 2**32-1 bytes large; may contain
+         arbitrary byte values).
+    "a": A list of at most 2**32-1 byte strings as for format unit "s".
+    "m": A mapping with at most 2**32-1 pairs of keys and values, both of
+         which may be arbitrary byte strings as above.
+    """
+
     def __init__(self, rfile, wfile):
+        "Instance initializer; see class docstring for details."
         self.rfile = rfile
         self.wfile = wfile
         self._rmap = {
@@ -605,53 +641,89 @@ class Codec:
             'm': self.write_bytedict}
 
     def close(self):
+        """
+        Close the underlying streams.
+        """
         try:
             self.rfile.close()
-        except Exception:
-            pass
-        try:
+        finally:
             self.wfile.close()
-        except Exception:
-            pass
 
     def flush(self):
+        """
+        Flush the underlying *writing* stream.
+
+        Use this to actually send data if wfile is buffering.
+        """
         self.wfile.flush()
 
     def read_nothing(self):
+        """
+        Read nothing and return None.
+
+        This is provided for symmetry with the other read_*() methods and used
+        internally.
+        """
         return None
 
     def write_nothing(self, value):
+        """
+        Ensure the given argument is None and write nothing.
+
+        See the notes for read_nothing().
+        """
         if value is not None:
             raise TypeError('Non-None value passed to write_nothing()')
         # NOP
 
     def read_char(self):
+        """
+        Read a single character.
+        """
         ret = self.rfile.read(1)
         if len(ret) != 1: raise EOFError('Received end-of-file')
         return ret
 
     def write_char(self, item):
+        """
+        Write a single character.
+        """
         self.wfile.write(item)
 
     def read_int(self):
+        """
+        Read a 32-bit unsigned integer and return a Python integer.
+        """
         data = self.rfile.read(INTEGER.size)
         if len(data) != INTEGER.size: raise EOFError('Short read')
         return INTEGER.unpack(data)[0]
 
     def write_int(self, item):
+        """
+        Write a Python integer as an unsigned 32-bit integer.
+        """
         self.wfile.write(INTEGER.pack(item))
 
     def read_bytes(self):
+        """
+        Read a byte string.
+        """
         length = self.read_int()
         ret = self.rfile.read(length)
         if len(ret) != length: raise EOFError('Short read')
         return ret
 
     def write_bytes(self, data):
+        """
+        Write a byte string.
+        """
         self.write_int(len(data))
         self.wfile.write(data)
 
     def read_bytelist(self):
+        """
+        Read a list of byte strings.
+        """
         length = self.read_int()
         ret = []
         while length:
@@ -660,11 +732,17 @@ class Codec:
         return ret
 
     def write_bytelist(self, data):
+        """
+        Write a sequence of byte strings.
+        """
         self.write_int(len(data))
         for item in data:
             self.write_bytes(item)
 
     def read_bytedict(self):
+        """
+        Read a dictionary with byte strings as keys and values.
+        """
         length = self.read_int()
         ret = {}
         while length:
@@ -675,12 +753,21 @@ class Codec:
         return ret
 
     def write_bytedict(self, data):
+        """
+        Write a mapping with byte strings as keys and values.
+        """
         self.write_int(len(data))
         for k, v in data.items():
             self.write_bytes(k)
             self.write_bytes(v)
 
     def readf(self, format):
+        """
+        Read a sequence of values as indicated by the format string.
+
+        Unless the "@" modifier is specified, the return value is a list of
+        the values read. See the class docstring for format string details.
+        """
         if format.startswith('@'):
             single = True
             if len(format) != 2:
@@ -696,6 +783,13 @@ class Codec:
         return ret
 
     def writef(self, format, *args):
+        """
+        Write a sequence of values as indicated by the format string.
+
+        If the "*" modifier is specified, there must be exactly one additional
+        argument; otherwise, args contains the values to be written. See the
+        class docstring for format string details.
+        """
         if format.startswith('*'):
             format = format[1:]
             if len(args) != 1:
