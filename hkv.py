@@ -17,7 +17,7 @@ keys, scalar values, and paths (key-value collections remain Python
 dictionaries).
 """
 
-import sys, os
+import os
 import struct
 import threading
 import socket
@@ -569,13 +569,13 @@ class ConvertingDataStore(BaseDataStore):
         "Merge pairs from values below path; see BaseDataStore for details."
         ik, iv = self.import_key, self.import_value
         ivalues = {ik(k, True): iv(v) for k, v in values.items()}
-        self.wrapped.put_all(self, self.import_key(path, False), ivalues)
+        self.wrapped.put_all(self.import_key(path, False), ivalues)
 
     def replace(self, path, values):
         "Store values at path; see BaseDataStore for details."
         ik, iv = self.import_key, self.import_value
         ivalues = {ik(k, True): iv(v) for k, v in values.items()}
-        self.wrapped.replace(self, self.import_key(path, False), ivalues)
+        self.wrapped.replace(self.import_key(path, False), ivalues)
 
     def delete(self, path):
         "Delete the value at path; see BaseDataStore for details."
@@ -1204,6 +1204,46 @@ class RemoteDataStore(BaseDataStore):
         "Delete everything below path; see BaseDataStore for details."
         return self._run_operation(b'D', path)
 
+class TextDataStore(ConvertingDataStore):
+    """
+    TextDataStore(wrapped, nulldelim=False) -> new instance
+
+    A sample implementation of ConvertingDataStore that converts data into
+    Unicode strings.
+
+    Paths delimited by slash characters (in particular, keys that contain
+    slashes themselves cannot be used), or if nulldelim is true, NUL
+    characters (in that case, keys containing NUL characters are unusable).
+
+    Because of this ambiguity, this class is not recommended for general use
+    and not included in the module's default export list.
+    """
+
+    def __init__(self, wrapped, nulldelim=False):
+        ConvertingDataStore.__init__(self, wrapped)
+        self.delimiter = '\0' if nulldelim else '/'
+
+    def import_key(self, key, fragment):
+        "Import the given key; see ConvertingDataStore for details."
+        if self.delimiter in key and fragment:
+            raise ValueError('Non-path keys may not contain delimiters')
+        key = key.encode('utf-8')
+        if not fragment: key = key.split(self.delimiter.encode('utf-8'))
+        return key
+
+    def export_key(self, key, fragment):
+        "Export the given key; see ConvertingDataStore for details."
+        if not fragment: key = self.delimiter.encode('utf-8').join(key)
+        return key.decode('utf-8', errors='replace')
+
+    def import_value(self, value):
+        "Import the given value; see ConvertingDataStore for details."
+        return value.encode('utf-8')
+
+    def export_value(self, value):
+        "Export the given value; see ConvertingDataStore for details."
+        return value.decode('utf-8', errors='replace')
+
 def main_listen(params, no_timestamps, loglevel):
     """
     Helper function for running a server from the command line.
@@ -1220,7 +1260,6 @@ def main_listen(params, no_timestamps, loglevel):
         logging.basicConfig(format='[%(asctime)s %(name)s %(levelname)s] '
             '%(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=loglevel)
     server = DataStoreServer(**params)
-    server.listen()
     try:
         server.main()
     except KeyboardInterrupt:
@@ -1243,7 +1282,7 @@ def main_command(params, nullterm, command, *args):
     # Parse command line
     if command in ('get', 'get_all', 'delete', 'delete_all'):
         ensure_args(1, 1)
-        cmdargs = ()
+        cmdargs = args
     elif command == 'list':
         ensure_args(2, 2)
         flags = 0
@@ -1257,46 +1296,45 @@ def main_command(params, nullterm, command, *args):
             else:
                 raise SystemExit('ERROR: Unrecognized listing class '
                     'character: %s' % char)
-        cmdargs = [flags]
+        cmdargs = (args[0], flags)
     elif command == 'put':
         ensure_args(2, 2)
-        cmdargs = (args[1].encode('utf-8'),)
+        cmdargs = args
     elif command in ('put_all', 'replace'):
         ensure_args(1)
         values = {}
         for item in args[1:]:
-            k, _, v = item.encode('utf-8').partition(b'=')
+            k, _, v = item.partition('=')
             values[k] = v
-        cmdargs = (values,)
+        cmdargs = (args[0], values)
     else:
         raise SystemExit('ERROR: Unknown command: %s' % command)
-    path = args[0].encode('utf-8').split(b'/')
     # Create client and execute command
     client = RemoteDataStore(**params)
     try:
         client.connect()
     except IOError as exc:
         raise SystemExit('ERROR: %s' % exc)
+    wrapper = TextDataStore(client, nullterm)
     try:
-        result = getattr(client, command)(path, *cmdargs)
-    except HKVError as exc:
+        result = getattr(wrapper, command)(*cmdargs)
+    except (HKVError, ValueError) as exc:
         raise SystemExit('ERROR: %s' % exc)
     finally:
         client.close()
-    try:
-        outfile = sys.stdout.buffer
-    except AttributeError:
-        outfile = sys.stdout
-    sep, term = (b'\0', b'\0') if nullterm else (b'=', b'\n')
-    if isinstance(result, bytes):
-        outfile.write(result + term)
+    if result is None:
+        pass
+    elif isinstance(result, str):
+        print (result)
     elif isinstance(result, list):
         for item in result:
-            outfile.write(item + term)
+            print (item)
     elif isinstance(result, dict):
+        sep = '\0' if nullterm else '='
         for key, value in result.items():
-            outfile.write(key + sep + value + term)
-    outfile.flush()
+            print (key + sep + value)
+    else:
+        raise RuntimeError('Unrecognized result: %r' % (result,))
 
 def main():
     """
