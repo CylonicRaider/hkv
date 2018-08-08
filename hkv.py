@@ -140,7 +140,7 @@ def spawn_thread(func, *args, **kwds):
     thr.start()
     return thr
 
-class BaseDataStore:
+class BaseDataStore(object):
     """
     An abstract class defining the operations DataStore et al. support.
 
@@ -585,7 +585,7 @@ class ConvertingDataStore(BaseDataStore):
         "Delete everything below path; see BaseDataStore for details."
         self.wrapped.delete_all(self.import_key(path, False))
 
-class Codec:
+class Codec(object):
     """
     Codec(rfile, wfile) -> new instance
 
@@ -801,7 +801,7 @@ class Codec:
         for t, a in zip(format, args):
             self._wmap[t](a)
 
-class DataStoreServer:
+class DataStoreServer(object):
     """
     DataStoreServer(addr, addrfamily=None) -> new instance
 
@@ -814,7 +814,7 @@ class DataStoreServer:
     (potentially in a background thread).
     """
 
-    class ClientHandler:
+    class ClientHandler(object):
         """
         ClientHandler(parent, id, conn, addr) -> new instance
 
