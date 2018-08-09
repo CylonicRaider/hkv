@@ -943,7 +943,7 @@ class DataStoreServer(object):
                         name = self.codec.read_bytes()
                         self.datastore = self.parent.get_datastore(name)
                         self.codec.write_char(b'-')
-                    elif cmd == b'c':
+                    elif cmd == b'x':
                         self.unlock(True)
                         self.datastore = None
                         self.codec.write_char(b'-')
