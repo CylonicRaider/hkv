@@ -75,18 +75,18 @@ INTEGER = struct.Struct('!I')
 
 class HKVError(Exception):
     """
-    HKVError(code, message) -> new instance
+    HKVError(code, name, message) -> new instance
 
     General exception for this module.
 
-    code is a numeric error code; message is a human-readable description of
-    the error; the two are combined into the final exception message by the
-    constructor. Users are encouraged to use the factory functions provided on
-    the class instead of calling the constructor directly.
+    code is a numeric error code; name is a symbolic name for the error;
+    message is a human-readable description of the error; the three are
+    combined into the final exception message by the constructor. Users are
+    encouraged to use the factory functions provided on the class instead of
+    calling the constructor directly.
 
-    Instances have a "code" attribute that is the numeric error code; it can
-    be mapped to a tuple of a symbolic name and a human-readable description
-    via the module-level ERROR_CODES mapping.
+    The "code" and "name" constructor parameters are stored in same-named
+    instance attributes.
     """
 
     @classmethod
@@ -94,7 +94,8 @@ class HKVError(Exception):
         """
         Create a HKVError instance from a symbolic error name.
         """
-        return cls(*ERRORS[name])
+        desc = ERRORS[name]
+        return cls(desc[0], name, desc[1])
 
     @classmethod
     def for_code(cls, code):
@@ -102,15 +103,17 @@ class HKVError(Exception):
         Create a HKVError instance from a numeric code.
         """
         try:
-            description = ERRORS[ERROR_CODES[code][0]][1]
+            name, description = ERROR_CODES[code]
         except KeyError:
-            description = 'Unknown error?!'
-        return cls(code, description)
+            name, description = '???', 'Unknown error?!'
+        return cls(code, name, description)
 
-    def __init__(self, code, message):
+    def __init__(self, code, name, message):
         "Initializer. See class docstring for details."
-        super(HKVError, self).__init__('code %s: %s' % (code, message))
+        super(HKVError, self).__init__('code %s (%s): %s' % (code, name,
+                                                             message))
         self.code = code
+        self.name = name
 
 def parse_url(url):
     """
