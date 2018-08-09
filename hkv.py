@@ -4,6 +4,15 @@
 """
 In-memory hierarchical key-value store.
 
+A typical usage scenario -- aside from using a DataStore instance as a
+glorified dictionary -- would be to run a server (using the DataStoreServer
+class, or by running this module as a script) and to connect to it using a
+RemoteDataStore instance; this allows sharing data across process lifetimes
+and possibly across language boundaries. In all cases, a ConvertingDataStore
+subclass may be employed to convert the values (which may only be byte strings
+when using most classes here) to some more palatable application-defined type
+(or types) transparently.
+
 A DataStore holds pairs of keys and values (with unique keys), where each
 value can be either a "scalar" or a nested collection of key-value pairs with
 the same semantics. Each value is reachable through a path, which corresponds
