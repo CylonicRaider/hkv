@@ -13,7 +13,7 @@ subclass may be employed to convert the values (which may only be byte strings
 when using most classes here) to some more palatable application-defined type
 (or types) transparently.
 
-A DataStore holds pairs of keys and values (with unique keys), where each
+A datastore holds pairs of keys and values (with unique keys), where each
 value can be either a "scalar" or a nested collection of key-value pairs with
 the same semantics. Each value is reachable through a path, which corresponds
 to a sequence of keys; if the path points to a key-value collection, the keys
@@ -60,7 +60,7 @@ ERRORS = {
 # Mapping from error codes to names and descriptions.
 ERROR_CODES = {code: (name, desc) for name, (code, desc) in ERRORS.items()}
 
-# Possible lclass argments to DataStore.list().
+# Possible lclass argments to the list() method.
 LCLASS_NONE   = 0 # List nothing.
 LCLASS_SCALAR = 1 # List values contained in this key.
 LCLASS_NESTED = 2 # List nested keys.
@@ -172,8 +172,8 @@ class BaseDataStore(object):
     These errors are not explicitly noted below. Some implementations may
     raise less errors than noted here.
 
-    DataStore objects support the context management protocol; when used in a
-    with statement, the DataStore is locked before entering the code block and
+    Datastore objects support the context management protocol; when used in a
+    with statement, the datastore is locked before entering the code block and
     unlocked after exiting the code block.
     """
 
@@ -184,7 +184,7 @@ class BaseDataStore(object):
         See the class docstring for details.
 
         The default implementation calls the lock() method and returns the
-        DataStore object it is called upon.
+        datastore object it is called upon.
         """
         self.lock()
         return self
@@ -315,7 +315,7 @@ class DataStore(BaseDataStore):
     """
     DataStore() -> new instance
 
-    This is an in-memory implementation of the DataStore interface.
+    This is an in-memory implementation of the datastore interface.
     """
 
     # Operation names are mostly inspired by HTTP methods, aside from list,
@@ -450,7 +450,7 @@ class NullDataStore(BaseDataStore):
     """
     NullDataStore() -> new instance
 
-    A DataStore implementation that does not retain any data.
+    A datastore implementation that does not retain any data.
 
     All reading requests (get(), get_all(), list()) raise a NOKEY error, while
     all other operations do nothing.
@@ -493,7 +493,7 @@ class ConvertingDataStore(BaseDataStore):
     """
     ConvertingDataStore(wrapped) -> new instance
 
-    A wrapper around another DataStore that converts keys and values on the
+    A wrapper around another datastore that converts keys and values on the
     fly.
 
     An "internal" format for keys and values is used when speaking with the
@@ -546,15 +546,15 @@ class ConvertingDataStore(BaseDataStore):
         raise NotImplementedError
 
     def lock(self):
-        "Lock this DataStore; see BaseDataStore for details."
+        "Lock this datastore; see BaseDataStore for details."
         self.wrapped.lock()
 
     def unlock(self):
-        "Unlock this DataStore; see BaseDataStore for details."
+        "Unlock this datastore; see BaseDataStore for details."
         self.wrapped.unlock()
 
     def close(self):
-        "Dispose of this DataStore; see BaseDataStore for details."
+        "Dispose of this datastore; see BaseDataStore for details."
         self.wrapped.close()
 
     def get(self, path):
@@ -1066,7 +1066,7 @@ class RemoteDataStore(BaseDataStore):
     """
     RemoteDataStore(addr, dsname=None, addrfamily=None) -> new instance
 
-    A proxy for a remote DataStore.
+    A proxy for a remote datastore.
 
     addr is the socket address to connect to; dsname is the name of the remote
     datastore to use (if omitted, a datastore must be explicitly opened using
@@ -1110,7 +1110,7 @@ class RemoteDataStore(BaseDataStore):
         self._run_command(b'o', 's', dsname)
 
     def close(self):
-        "Dispose of this DataStore; see BaseDataStore for details."
+        "Dispose of this datastore; see BaseDataStore for details."
         try:
             self.socket.shutdown(socket.SHUT_RDWR)
         except Exception:
@@ -1152,7 +1152,7 @@ class RemoteDataStore(BaseDataStore):
                 raise HKVError.for_name('NORESP')
 
     def _run_operation(self, opname, *args):
-        "Helper method performing a remote DataStore operation."
+        "Helper method performing a remote datastore operation."
         operation = DataStore._OPERATIONS[opname]
         return self._run_command(opname, operation[0], *args)
 
@@ -1176,12 +1176,12 @@ class RemoteDataStore(BaseDataStore):
         return self._run_command(b'f', '')
 
     def lock(self):
-        "Lock this DataStore; see BaseDataStore for details."
+        "Lock this datastore; see BaseDataStore for details."
         self._lock.acquire()
         self.lock()
 
     def unlock(self):
-        "Unlock this DataStore; see BaseDataStore for details."
+        "Unlock this datastore; see BaseDataStore for details."
         try:
             self.unlock_remote()
         finally:
