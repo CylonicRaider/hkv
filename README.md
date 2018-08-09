@@ -13,7 +13,7 @@ capabilities are provided.
 ## How do I use it?
 
 A typical setup would be to run the module as a server and to use the library
-in client programs to store data at the server.
+in client programs to store data on the server.
 
 ### Installation
 
