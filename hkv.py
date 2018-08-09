@@ -989,6 +989,7 @@ class DataStoreServer(object):
         self.socket = None
         self.datastores = {}
         self._next_id = 1
+        self._lock = threading.RLock()
         self.logger = logging.getLogger('server')
 
     def listen(self):
@@ -1034,12 +1035,13 @@ class DataStoreServer(object):
 
         Used by ClientHandler.
         """
-        try:
-            return self.datastores[name]
-        except KeyError:
-            ret = DataStore()
-            self.datastores[name] = ret
-            return ret
+        with self._lock:
+            try:
+                return self.datastores[name]
+            except KeyError:
+                ret = DataStore()
+                self.datastores[name] = ret
+                return ret
 
     def main(self):
         """
