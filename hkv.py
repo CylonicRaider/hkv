@@ -107,7 +107,7 @@ class HKVError(Exception):
 
     def __init__(self, code, message):
         "Initializer. See class docstring for details."
-        Exception.__init__(self, 'code %s: %s' % (code, message))
+        super(HKVError, self).__init__('code %s: %s' % (code, message))
         self.code = code
 
 def parse_url(url):
@@ -1231,7 +1231,7 @@ class TextDataStore(ConvertingDataStore):
     """
 
     def __init__(self, wrapped, nulldelim=False):
-        ConvertingDataStore.__init__(self, wrapped)
+        super(TextDataStore, self).__init__(wrapped)
         self.delimiter = '\0' if nulldelim else '/'
 
     def import_key(self, key, fragment):
