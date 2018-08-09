@@ -26,6 +26,8 @@ keys, scalar values, and paths (key-value collections remain Python
 dictionaries).
 """
 
+__version__ = '1.0'
+
 import os
 import struct
 import threading
