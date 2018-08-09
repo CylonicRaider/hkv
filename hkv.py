@@ -318,6 +318,9 @@ class DataStore(BaseDataStore):
     This is an in-memory implementation of the DataStore interface.
     """
 
+    # Operation names are mostly inspired by HTTP methods, aside from list,
+    # which has no equivalent, and put_all and replace, which correspond to
+    # PATCH and PUT (on a nested subtree), respectively.
     _OPERATIONS = {
         b'g': ('a', 'get', 's'),
         b'G': ('a', 'get_all', 'm'),
