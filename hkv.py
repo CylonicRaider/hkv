@@ -40,9 +40,9 @@ except ImportError:
     from urlparse import urlsplit
 
 __all__ = ['ERRORS', 'ERROR_CODES', 'LCLASS_SCALAR', 'LCLASS_NESTED',
-           'LCLASS_ANY', 'HKVError', 'BaseDataStore', 'DataStore',
-           'NullDataStore', 'ConvertingDataStore', 'DataStoreServer',
-           'RemoteDataStore']
+           'LCLASS_ANY', 'HKVError', 'parse_url', 'BaseDataStore',
+           'DataStore', 'NullDataStore', 'ConvertingDataStore',
+           'DataStoreServer', 'RemoteDataStore']
 
 # Mapping from error names to codes and descriptions.
 ERRORS = {
