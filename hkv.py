@@ -1110,6 +1110,7 @@ class RemoteDataStore(BaseDataStore):
 
         Any previously opened datastore is automatically detached from.
         """
+        self.dsname = dsname
         self._run_command(b'o', 's', dsname)
 
     def close(self):
