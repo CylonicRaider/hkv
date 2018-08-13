@@ -30,6 +30,7 @@ __version__ = '1.0'
 
 import os
 import struct
+import errno
 import threading
 import socket
 import logging
@@ -55,7 +56,8 @@ ERRORS = {
     'BADTYPE': (7, 'Invalid value type'),
     'BADPATH': (8, 'Path too short'),
     'BADLCLASS': (9, 'Invalid listing class'),
-    'BADUNLOCK': (10, 'Unpaired unlock')}
+    'BADUNLOCK': (10, 'Unpaired unlock'),
+    'CONNBROKEN': (11, 'Remote connection broken')}
 
 # Mapping from error codes to names and descriptions.
 ERROR_CODES = {code: (name, desc) for name, (code, desc) in ERRORS.items()}
@@ -1098,6 +1100,7 @@ class RemoteDataStore(BaseDataStore):
         If the dsname attribute is not None, an open() call is automatically
         performed after successfully connecting.
         """
+        if self.socket is not None: self.close()
         self.socket = socket.socket(self.addrfamily)
         self.socket.connect(self.addr)
         self.codec = Codec(self.socket.makefile('rb'),
@@ -1143,17 +1146,24 @@ class RemoteDataStore(BaseDataStore):
         otherwise, the value responded with is returned.
         """
         with self._lock:
-            self.codec.write_char(cmd)
-            self.codec.writef(format, *args)
-            self.codec.flush()
-            resp = self.codec.read_char()
-            if resp == b'e':
-                code = self.codec.read_int()
-                raise HKVError.for_code(code)
-            elif resp in b'sam-':
-                return self.codec.readf('@' + resp.decode('ascii'))
-            else:
-                raise HKVError.for_name('NORESP')
+            try:
+                self.codec.write_char(cmd)
+                self.codec.writef(format, *args)
+                self.codec.flush()
+            except IOError as exc:
+                if exc.errno != errno.EPIPE: raise
+                raise HKVError.for_name('CONNBROKEN')
+            try:
+                resp = self.codec.read_char()
+                if resp == b'e':
+                    code = self.codec.read_int()
+                    raise HKVError.for_code(code)
+                elif resp in b'sam-':
+                    return self.codec.readf('@' + resp.decode('ascii'))
+                else:
+                    raise HKVError.for_name('NORESP')
+            except EOFError:
+                raise HKVError.for_name('CONNBROKEN')
 
     def _run_operation(self, opname, *args):
         "Helper method performing a remote datastore operation."
