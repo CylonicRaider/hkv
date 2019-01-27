@@ -575,7 +575,7 @@ class ConvertingDataStore(BaseDataStore):
 
     def list(self, path, lclass):
         "List some keys below path; see BaseDataStore for details."
-        items = self.wrapped.list(self.import_key(path, False))
+        items = self.wrapped.list(self.import_key(path, False), lclass)
         ek = self.export_key
         return [ek(i, True) for i in items]
 
