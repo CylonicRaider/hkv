@@ -1241,12 +1241,16 @@ class TextDataStore(ConvertingDataStore):
     A sample implementation of ConvertingDataStore that converts data into
     Unicode strings.
 
-    Paths delimited by slash characters (in particular, keys that contain
-    slashes themselves cannot be used), or if nulldelim is true, NUL
-    characters (in that case, keys containing NUL characters are unusable).
+    Paths are delimited by slash characters (in particular, keys that contain
+    slashes themselves cannot be used), or, if nulldelim is true, NUL
+    characters (in that case, keys containing NUL characters are unusable);
+    in either case, empty strings are not permitted as path components and are
+    silently elided if present in composite paths.
 
-    Because of this ambiguity, this class is not recommended for general use
-    and not included in the module's default export list.
+    Because of this ambiguity (and because decoding errors are silently mapped
+    to replacement characters for both keys and values), this class is not
+    recommended for general use and not included in the module's default
+    export list.
     """
 
     def __init__(self, wrapped, nulldelim=False):
@@ -1255,10 +1259,14 @@ class TextDataStore(ConvertingDataStore):
 
     def import_key(self, key, fragment):
         "Import the given key; see ConvertingDataStore for details."
-        if self.delimiter in key and fragment:
-            raise ValueError('Non-path keys may not contain delimiters')
+        if fragment:
+            if not key:
+                raise ValueError('Non-path keys must not be empty')
+            elif self.delimiter in key:
+                raise ValueError('Non-path keys may not contain delimiters')
         key = key.encode('utf-8')
-        if not fragment: key = key.split(self.delimiter.encode('utf-8'))
+        if not fragment:
+            key = [p for p in key.split(self.delimiter.encode('utf-8')) if p]
         return key
 
     def export_key(self, key, fragment):
