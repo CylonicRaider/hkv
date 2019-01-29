@@ -1322,9 +1322,9 @@ def main_command(params, nullterm, command, *args):
         ensure_args(1, 1)
         cmdargs = args
     elif command == 'list':
-        ensure_args(2, 2)
-        flags = 0
-        for char in args[1]:
+        ensure_args(1, 2)
+        raw_flags, flags = (args[1] if len(args) == 2 else 'a'), 0
+        for char in raw_flags:
             if char == 's':
                 flags |= LCLASS_SCALAR
             elif char == 'n':
