@@ -1303,7 +1303,7 @@ def main_listen(params, no_timestamps, loglevel):
     except KeyboardInterrupt:
         pass
 
-def main_command(params, nullterm, command, *args):
+def main_command(params, command, *args):
     """
     Helper function for running a single-command client from the command line.
 
@@ -1353,7 +1353,7 @@ def main_command(params, nullterm, command, *args):
         client.connect()
     except IOError as exc:
         raise SystemExit('ERROR: %s' % exc)
-    wrapper = TextDataStore(client, nullterm)
+    wrapper = TextDataStore(client)
     try:
         result = getattr(wrapper, command)(*cmdargs)
     except (HKVError, ValueError) as exc:
@@ -1368,9 +1368,8 @@ def main_command(params, nullterm, command, *args):
         for item in result:
             print (item)
     elif isinstance(result, dict):
-        sep = '\0' if nullterm else '='
         for key, value in result.items():
-            print (key + sep + value)
+            print ('%s=%s' % (key, value))
     else:
         raise RuntimeError('Unrecognized result: %r' % (result,))
 
@@ -1390,11 +1389,6 @@ def main():
                    help='No timestamps on logs')
     p.add_argument('--loglevel', '-L', default='INFO', metavar='LEVEL',
                    help='Logging level (defaults to INFO)')
-    p.add_argument('--null', '-0', action='store_true',
-                   help='Null-terminate data blocks on output instead of '
-                       'using human-readable characters (note that both keys '
-                       'and values can contain null characters, so that this '
-                       'does not ensure an unambiguous output)')
     p.add_argument('command', nargs='?',
                    help='Command to execute (client mode only)')
     p.add_argument('arg', nargs='*',
@@ -1422,6 +1416,6 @@ def main():
     if result.listen:
         main_listen(params, result.no_timestamps, result.loglevel)
     else:
-        main_command(params, result.null, result.command, *result.arg)
+        main_command(params, result.command, *result.arg)
 
 if __name__ == '__main__': main()
